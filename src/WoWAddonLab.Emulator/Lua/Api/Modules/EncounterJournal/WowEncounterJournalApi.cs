@@ -23,6 +23,7 @@ internal sealed class WowEncounterJournalApi : LuaApiModule
         RegisterEnums(state);
         foreach (var function in new[]
                  {
+                     "CanShowEncounterJournal",
                      "EJ_ClearSearch", "EJ_EndSearch", "EJ_GetContentTuningID",
                      "EJ_GetCreatureInfo", "EJ_GetCurrentTier", "EJ_GetDifficulty",
                      "EJ_GetEncounterInfo", "EJ_GetEncounterInfoByIndex",
@@ -543,6 +544,9 @@ internal sealed class WowEncounterJournalApi : LuaApiModule
                 return 1;
             case "EJ_GetSearchSize":
                 lua_pushinteger(state, journal.SearchSize);
+                return 1;
+            case "CanShowEncounterJournal":
+                lua_pushboolean(state, 1);
                 return 1;
             case "EJ_IsSearchFinished":
                 lua_pushboolean(

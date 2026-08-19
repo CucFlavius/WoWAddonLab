@@ -1,11 +1,12 @@
 # WoW Addon Lab
 
 A standalone World of Warcraft addon runtime for developing and testing installed addons without launching the game.
-!Currently in "early" development!
+
+Currently in "early" development, not ready for use yet just for messing with!
 
 ## What works
 
-- Native Lua 5.1 through Lua.NET, including WoW compatibility helpers.
+- Native Lua 5.1.5 through Lua.NET, including WoW compatibility helpers.
 - Per product addon catalog.
 - Optional official Blizzard UI loading, enabled by default and loaded before user addons.
 - Multi-addon Lua loading.
@@ -31,7 +32,7 @@ Headless for an AI agent, test runner, or CI:
 dotnet run --project src\WoWAddonLab --headless --product wow --enable MyAddonName
 ```
 
-`--product` accepts a product code such as `wow`, a product folder such as `_retail_`, or a full product path. `--enable` is repeatable or comma-separated.
+`--product` accepts a product code such as `wow`, `wowdev2`, a product folder such as `_retail_`, or a full product path. `--enable` is repeatable or comma-separated.
 Use `--profile account:MYACCOUNTNAME --import-saved` to copy that profile's data into the isolated emulator profile before startup.
 
 Use `--no-blizzard-ui` for isolated addon development, or `--blizzard-ui` to  force the official bootstrap regardless of the saved product setting.

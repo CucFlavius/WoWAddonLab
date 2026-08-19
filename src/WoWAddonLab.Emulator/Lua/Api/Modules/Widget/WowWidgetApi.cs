@@ -74,7 +74,7 @@ internal static class WowWidgetApi
         "GetEffectivelyFlattensRenderLayers", "GetFlattensRenderLayers",
         "GetFrameLevel", "GetFrameStrata", "GetHighestFrameLevel",
         "GetHitRectInsets", "GetHyperlinksEnabled", "GetID", "GetNumChildren",
-        "GetNumRegions", "GetPropagateKeyboardInput", "GetRaisedFrameLevel",
+        "GetNumRegions", "GetOnUpdateMode", "GetPropagateKeyboardInput", "GetRaisedFrameLevel",
         "GetRegions", "GetResizeBounds", "GetScale", "GetWindow",
         "HasAlphaGradient", "HasFixedFrameLevel", "HasFixedFrameStrata", "Hide",
         "InterceptStartDrag", "IsClampedToScreen", "IsDrawLayerEnabled",
@@ -85,6 +85,7 @@ internal static class WowWidgetApi
         "IsUserPlaced", "IsUsingParentLevel", "IsVisible", "LockHighlight", "Lower",
         "Raise", "RegisterAllEvents", "RegisterEvent", "RegisterEventCallback",
         "RegisterForDrag", "RegisterUnitEvent", "RegisterUnitEventCallback",
+        "AddRoleset", "GetRolesetNames", "IsRolesetFiltered", "RemoveRoleset", "SetRolesets",
         "RotateTextures", "SetAlpha", "SetAlphaFromBoolean", "SetAlphaGradient",
         "SetAttribute", "SetAttributeNoHandler", "SetClampRectInsets",
         "SetClampedToScreen", "SetClipsChildren", "SetDontSavePosition",
@@ -93,7 +94,7 @@ internal static class WowWidgetApi
         "SetHighlightLocked", "SetHitRectInsets", "SetHyperlinkPropagateToParent",
         "SetHyperlinksEnabled", "SetID", "SetIgnoreParentAlpha",
         "SetIgnoreParentScale", "SetIgnoringChildrenForBounds", "SetIsFrameBuffer",
-        "SetMovable", "SetPropagateKeyboardInput", "SetResizable", "SetResizeBounds",
+        "SetMovable", "SetOnUpdateMode", "SetPropagateKeyboardInput", "SetResizable", "SetResizeBounds",
         "SetScale", "SetShown", "SetToplevel", "SetUserPlaced",
         "SetUsingParentLevel", "SetWindow", "Show", "StartMoving", "StartSizing",
         "StopMovingOrSizing", "UnlockHighlight", "UnregisterAllEvents",
@@ -538,7 +539,7 @@ internal static class WowWidgetApi
             "cinematicmodel" =>
                 Merge(Region, Frame, SimpleModel, CharacterModel, CinematicModel),
             "checkbutton" => Merge(Region, Frame, Button, CheckButton),
-            "button" or "dropdownbutton" or "dropdowntogglebutton" or
+            "button" or "aurabutton" or "dropdownbutton" or "dropdowntogglebutton" or
                 "eventbutton" or "itembutton" => Merge(Region, Frame, Button),
             "editbox" or "eventeditbox" => Merge(Region, Frame, EditBox),
             "browser" => Merge(Region, Frame, Browser),

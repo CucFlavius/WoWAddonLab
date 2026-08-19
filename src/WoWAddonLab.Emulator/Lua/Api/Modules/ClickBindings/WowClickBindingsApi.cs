@@ -16,6 +16,7 @@ internal sealed class WowClickBindingsApi : LuaApiModule
 
     public override void Register(lua_State state)
     {
+        LuaBindings.RegisterClosureGlobal(state, "InClickBindingMode", Callback);
         lua_newtable(state);
         foreach (var function in Functions)
         {
@@ -39,6 +40,9 @@ internal sealed class WowClickBindingsApi : LuaApiModule
                         state,
                         "Usage: local canBeBound = C_ClickBindings.CanSpellBeClickBound(spellID)");
                 lua_pushboolean(state, bindings.CanSpellBeClickBound(spellId) ? 1 : 0);
+                return 1;
+            case "InClickBindingMode":
+                lua_pushboolean(state, bindings.InBindingMode ? 1 : 0);
                 return 1;
             case "GetTutorialShown":
                 lua_pushboolean(state, bindings.TutorialShown ? 1 : 0);

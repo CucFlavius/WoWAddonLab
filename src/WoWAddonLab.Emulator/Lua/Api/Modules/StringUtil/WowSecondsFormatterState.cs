@@ -15,6 +15,7 @@ internal sealed class WowSecondsFormatterState : IWowNumericFormatterState
     public bool CanRoundUpLastUnit { get; set; }
     public bool ConvertToLower { get; set; }
     public SecondsFormatterIntervalWhitespace Whitespace { get; set; }
+    public SecondsFormatterRounding Rounding { get; set; }
     public WowSecondsFormatterValue MaxInterval { get; } = new(3);
     public WowSecondsFormatterValue MinInterval { get; } = new(0);
     public WowSecondsFormatterValue DesiredUnitCount { get; } = new(2);
@@ -28,6 +29,7 @@ internal sealed class WowSecondsFormatterState : IWowNumericFormatterState
         CanRoundUpLastUnit = false;
         ConvertToLower = false;
         Whitespace = SecondsFormatterIntervalWhitespace.Preserve;
+        Rounding = SecondsFormatterRounding.RoundUp;
         MaxInterval.SetStatic(runtime, 3);
         MinInterval.SetStatic(runtime, 0);
         DesiredUnitCount.SetStatic(runtime, 2);

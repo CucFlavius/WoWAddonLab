@@ -15,6 +15,7 @@ public sealed class WowSpellState
     public int? LastCancelledSpellId { get; set; }
     public int? PickedUpSpellId { get; set; }
     public int? RangedAutoAttackSpellId { get; set; }
+    public bool TargetSpellChecksItemCondition { get; set; }
     public bool TargetSpellIsEnchanting { get; set; }
     public bool TargetSpellJumpsUpgradeTrack { get; set; }
     public bool TargetSpellReplacesBonusTree { get; set; }

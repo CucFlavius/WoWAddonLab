@@ -21,7 +21,7 @@ public sealed class WowEditModeState
         _path = savedVariablesDirectory is null
             ? null
             : Path.Combine(savedVariablesDirectory, "Client", "EditMode.json");
-        for (var setting = 0; setting <= 33; setting++)
+        for (var setting = 0; setting <= 35; setting++)
             AccountSettings[setting] = 0;
         AccountSettings[1] = 100;
         Load();

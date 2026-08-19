@@ -59,6 +59,9 @@ local function call_native_string_format(formatString, ...)
     return unpack(results, 2)
 end
 local function normalize_format_conversions(formatString)
+    if type(formatString) ~= "string" then
+        return formatString
+    end
     local pieces = {}
     local position = 1
     while position <= #formatString do
@@ -89,6 +92,9 @@ local function normalize_format_conversions(formatString)
 end
 
 string.format = function(formatString, ...)
+    if type(formatString) ~= "string" then
+        return call_native_string_format(formatString, ...)
+    end
     local normalizedFormat = normalize_format_conversions(formatString)
     local arguments = { n = select("#", ...), ... }
     if not normalizedFormat:find("%%%d+%$") then
@@ -187,6 +193,335 @@ canaccessallvalues = canaccessallvalues or function() return true end
 issecure = issecure or function() return true end
 forceinsecure = forceinsecure or function(callback, ...) return callback(...) end
 secretwrap = secretwrap or function(value) return value end
+settablesecurity = settablesecurity or function() end
+
+C_Secrets = C_Secrets or {}
+
+local function NeverSecret()
+    return Enum and Enum.SecrecyLevel and Enum.SecrecyLevel.NeverSecret or 0
+end
+
+local function NotSecret()
+    return false
+end
+
+C_Secrets.CanCompareUnitTokens = C_Secrets.CanCompareUnitTokens or function() return true end
+C_Secrets.HasSecretRestrictions = C_Secrets.HasSecretRestrictions or NotSecret
+C_Secrets.GetPowerTypeSecrecy = C_Secrets.GetPowerTypeSecrecy or NeverSecret
+C_Secrets.GetSpellAuraSecrecy = C_Secrets.GetSpellAuraSecrecy or NeverSecret
+C_Secrets.GetSpellCastSecrecy = C_Secrets.GetSpellCastSecrecy or NeverSecret
+C_Secrets.GetSpellCooldownSecrecy = C_Secrets.GetSpellCooldownSecrecy or NeverSecret
+C_Secrets.ShouldActionCooldownBeSecret = C_Secrets.ShouldActionCooldownBeSecret or NotSecret
+C_Secrets.ShouldAurasBeSecret = C_Secrets.ShouldAurasBeSecret or NotSecret
+C_Secrets.ShouldCooldownsBeSecret = C_Secrets.ShouldCooldownsBeSecret or NotSecret
+C_Secrets.ShouldSpellAuraBeSecret = C_Secrets.ShouldSpellAuraBeSecret or NotSecret
+C_Secrets.ShouldSpellBookItemCooldownBeSecret = C_Secrets.ShouldSpellBookItemCooldownBeSecret or NotSecret
+C_Secrets.ShouldSpellCooldownBeSecret = C_Secrets.ShouldSpellCooldownBeSecret or NotSecret
+C_Secrets.ShouldTotemSlotBeSecret = C_Secrets.ShouldTotemSlotBeSecret or NotSecret
+C_Secrets.ShouldUnitSpellCastingBeSecret = C_Secrets.ShouldUnitSpellCastingBeSecret or NotSecret
+
+table.count = table.count or function(values)
+    local total = 0
+    for _ in pairs(values or {}) do
+        total = total + 1
+    end
+    return total
+end
+
+C_PaperDollInfo = C_PaperDollInfo or {}
+C_PaperDollInfo.GetInventorySlotInfo = C_PaperDollInfo.GetInventorySlotInfo or function(slotName)
+    return GetInventorySlotInfo(slotName)
+end
+
+C_CVar = C_CVar or {}
+C_CVar.AreCVarsLoaded = C_CVar.AreCVarsLoaded or function() return true end
+
+GetGlobalEnvironment = GetGlobalEnvironment or function() return _G end
+
+C_PaperDollInfo.GetTemporaryEnchantmentInfo =
+    C_PaperDollInfo.GetTemporaryEnchantmentInfo or function() end
+
+C_FriendList = C_FriendList or {}
+C_FriendList.IsLegacyFriendSystemEnabled =
+    C_FriendList.IsLegacyFriendSystemEnabled or function() return true end
+
+local loadOnDemandAddOns = {
+    APIDocumentation_LoadUI = "Blizzard_APIDocumentation",
+    AchievementFrame_LoadUI = "Blizzard_AchievementUI",
+    ArdenwealdGardening_LoadUI = "Blizzard_ArdenwealdGardening",
+    BattlefieldMap_LoadUI = "Blizzard_BattlefieldMap",
+    BoostTutorial_LoadUI = "Blizzard_BoostTutorial",
+    Calendar_LoadUI = "Blizzard_Calendar",
+    ChallengeMode_LoadUI = "Blizzard_ChallengesUI",
+    ClassTrainerFrame_LoadUI = "Blizzard_TrainerUI",
+    CollectionsJournal_LoadUI = "Blizzard_Collections",
+    CombatLog_LoadUI = "Blizzard_CombatLog",
+    CombatText_LoadUI = "Blizzard_CombatText",
+    Commentator_LoadUI = "Blizzard_Commentator",
+    CooldownBroadcaster_LoadUI = "Blizzard_CooldownBroadcaster",
+    CovenantCallings_LoadUI = "Blizzard_CovenantCallings",
+    DebugTools_LoadUI = "Blizzard_DebugTools",
+    EncounterJournal_LoadUI = "Blizzard_EncounterJournal",
+    EventTrace_LoadUI = "Blizzard_EventTrace",
+    ExpansionTrial_LoadUI = "Blizzard_ExpansionTrial",
+    Garrison_LoadUI = "Blizzard_GarrisonUI",
+    GenericTraitUI_LoadUI = "Blizzard_GenericTraitUI",
+    HousingControls_LoadUI = "Blizzard_HousingControls",
+    HybridMinimap_LoadUI = "Blizzard_HybridMinimap",
+    ItemSocketingFrame_LoadUI = "Blizzard_ItemSocketingUI",
+    LandingSoulbinds_LoadUI = "Blizzard_LandingSoulbinds",
+    MacroFrame_LoadUI = "Blizzard_MacroUI",
+    MovePad_LoadUI = "Blizzard_MovePad",
+    NPE_LoadUI = "Blizzard_NewPlayerExperience",
+    PVPUI_LoadUI = "Blizzard_PVPUI",
+    PlayerSpellsFrame_LoadUI = "Blizzard_PlayerSpells",
+    ProfessionsFrame_LoadUI = "Blizzard_Professions",
+    RaidFrame_LoadUI = "Blizzard_RaidUI",
+    RemixArtifactTutorialUI_LoadUI = "Blizzard_RemixArtifactTutorialUI",
+    SoulbindViewer_LoadUI = "Blizzard_Soulbinds",
+    SubscriptionInterstitial_LoadUI = "Blizzard_SubscriptionInterstitialUI",
+    TimeManager_LoadUI = "Blizzard_TimeManager",
+}
+
+local function LoadAddOnUi(addonName)
+    return function()
+        if C_AddOns and C_AddOns.LoadAddOn then
+            C_AddOns.LoadAddOn(addonName)
+        end
+    end
+end
+
+for loaderName, addonName in pairs(loadOnDemandAddOns) do
+    _G[loaderName] = rawget(_G, loaderName) or LoadAddOnUi(addonName)
+end
+
+local function TogglePanelUi(loaderName, frameName)
+    return function()
+        _G[loaderName]()
+        local frame = _G[frameName]
+        if frame then
+            ToggleFrame(frame)
+        end
+    end
+end
+
+ToggleAchievementFrame = rawget(_G, "ToggleAchievementFrame") or function(...)
+    AchievementFrame_LoadUI()
+    if AchievementFrame_ToggleAchievementFrame then
+        AchievementFrame_ToggleAchievementFrame(...)
+    end
+end
+
+ToggleCollectionsJournal = rawget(_G, "ToggleCollectionsJournal") or function(tabIndex)
+    CollectionsJournal_LoadUI()
+    if not CollectionsJournal then
+        return
+    end
+    if tabIndex and CollectionsJournal_SetTab then
+        if CollectionsJournal:IsShown() and CollectionsJournal.selectedTab == tabIndex then
+            HideUIPanel(CollectionsJournal)
+            return
+        end
+        CollectionsJournal_SetTab(CollectionsJournal, tabIndex)
+        ShowUIPanel(CollectionsJournal)
+        return
+    end
+    ToggleFrame(CollectionsJournal)
+end
+
+ToggleEncounterJournal = rawget(_G, "ToggleEncounterJournal") or
+    TogglePanelUi("EncounterJournal_LoadUI", "EncounterJournal")
+ToggleProfessionsBook = rawget(_G, "ToggleProfessionsBook") or function()
+    if C_AddOns and C_AddOns.LoadAddOn then
+        C_AddOns.LoadAddOn("Blizzard_ProfessionsBook")
+    end
+    if ProfessionsBookFrame then
+        ToggleFrame(ProfessionsBookFrame)
+    end
+end
+ToggleCalendar = rawget(_G, "ToggleCalendar") or
+    TogglePanelUi("Calendar_LoadUI", "CalendarFrame")
+ToggleBattlefieldMap = rawget(_G, "ToggleBattlefieldMap") or
+    TogglePanelUi("BattlefieldMap_LoadUI", "BattlefieldMapFrame")
+
+IsBoostTutorialScenario = IsBoostTutorialScenario or function() return false end
+GetBuildOption = GetBuildOption or function() return false end
+
+C_RecruitAFriend = C_RecruitAFriend or {}
+C_RecruitAFriend.IsSystemEnabled = C_RecruitAFriend.IsSystemEnabled or function() return false end
+
+C_UnitAuras = C_UnitAuras or {}
+C_UnitAuras.GetHiddenGroupBuffs = C_UnitAuras.GetHiddenGroupBuffs or function() return {} end
+C_UnitAuras.GetGroupBuffVisualAlerts = C_UnitAuras.GetGroupBuffVisualAlerts or function() return {} end
+
+C_DelvesUI = C_DelvesUI or {}
+C_DelvesUI.GetFlavorNodeForCompanion = C_DelvesUI.GetFlavorNodeForCompanion or function() return 0 end
+
+C_LFGList = C_LFGList or {}
+C_LFGList.IsCensoredActiveEntryUnresolved =
+    C_LFGList.IsCensoredActiveEntryUnresolved or function() return false end
+
+C_Discord = C_Discord or {}
+C_Discord.Authorize = C_Discord.Authorize or function() end
+C_Discord.GetDiscordChannelName = C_Discord.GetDiscordChannelName or function() return nil end
+C_Discord.GetDiscordUserID = C_Discord.GetDiscordUserID or function() return nil end
+C_Discord.GetDiscordUserName = C_Discord.GetDiscordUserName or function() return nil end
+C_Discord.GetDisplayNameType = C_Discord.GetDisplayNameType or function() return nil end
+C_Discord.GetGuildLinkStatus = C_Discord.GetGuildLinkStatus or function() return false, nil, nil end
+C_Discord.GetNumDiscordChannels = C_Discord.GetNumDiscordChannels or function() return 0, false end
+C_Discord.GetNumDiscordServers = C_Discord.GetNumDiscordServers or function() return 0 end
+C_Discord.GetServerLinkableChannels = C_Discord.GetServerLinkableChannels or function() end
+C_Discord.GetServerName = C_Discord.GetServerName or function() return nil end
+C_Discord.GuildLink = C_Discord.GuildLink or function() end
+C_Discord.GuildUnlink = C_Discord.GuildUnlink or function() end
+C_Discord.IsEnabled = C_Discord.IsEnabled or function() return false end
+C_Discord.IsGuildChannelLinked = C_Discord.IsGuildChannelLinked or function() return false end
+C_Discord.IsGuildSettingSet = C_Discord.IsGuildSettingSet or function() return false end
+C_Discord.IsUserOAuthed = C_Discord.IsUserOAuthed or function() return false end
+C_Discord.RefreshAuth = C_Discord.RefreshAuth or function() end
+C_Discord.SetGuildSetting = C_Discord.SetGuildSetting or function() end
+C_Discord.UpdateDiscordServers = C_Discord.UpdateDiscordServers or function() end
+C_Discord.UpdateGuildLobby = C_Discord.UpdateGuildLobby or function() end
+
+C_SocialUI = C_SocialUI or {}
+C_SocialUI.IsSystemEnabled = C_SocialUI.IsSystemEnabled or function() return false end
+
+C_ClientScene = C_ClientScene or {}
+C_ClientScene.IsSceneTypeActive = C_ClientScene.IsSceneTypeActive or function() return false end
+
+securecopy = securecopy or function(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    local copy = {}
+    for key, entry in pairs(value) do
+        copy[key] = securecopy(entry)
+    end
+    return copy
+end
+
+C_HousingLayout = C_HousingLayout or {}
+C_HousingLayout.AnyRoomsOnFloor = C_HousingLayout.AnyRoomsOnFloor or function() return false end
+C_HousingLayout.CanSetViewedFloor = C_HousingLayout.CanSetViewedFloor or function() return false end
+C_HousingLayout.CancelActiveLayoutEditing = C_HousingLayout.CancelActiveLayoutEditing or function() end
+C_HousingLayout.ConfirmStairChoice = C_HousingLayout.ConfirmStairChoice or function() end
+C_HousingLayout.DeselectFloorplan = C_HousingLayout.DeselectFloorplan or function() end
+C_HousingLayout.DeselectRoomOrDoor = C_HousingLayout.DeselectRoomOrDoor or function() end
+C_HousingLayout.GetBaseRoomFloor = C_HousingLayout.GetBaseRoomFloor or function() return 0 end
+C_HousingLayout.GetHighestOccupiedFloorIndex = C_HousingLayout.GetHighestOccupiedFloorIndex or function() return 0 end
+C_HousingLayout.GetLowestOccupiedFloorIndex = C_HousingLayout.GetLowestOccupiedFloorIndex or function() return 0 end
+C_HousingLayout.GetNumActiveRooms = C_HousingLayout.GetNumActiveRooms or function() return 0 end
+C_HousingLayout.GetRoomPlacementBudget = C_HousingLayout.GetRoomPlacementBudget or function() return nil end
+C_HousingLayout.GetRoomPlayerIsIn = C_HousingLayout.GetRoomPlayerIsIn or function() return nil end
+C_HousingLayout.GetSelectedBlueprintFloorplan = C_HousingLayout.GetSelectedBlueprintFloorplan or function() return 0, nil end
+C_HousingLayout.GetSelectedDoor = C_HousingLayout.GetSelectedDoor or function() return 0, nil end
+C_HousingLayout.GetSelectedFloorplan = C_HousingLayout.GetSelectedFloorplan or function() return nil end
+C_HousingLayout.GetSelectedRoom = C_HousingLayout.GetSelectedRoom or function() return nil end
+C_HousingLayout.GetSelectedStairwellRoomCount = C_HousingLayout.GetSelectedStairwellRoomCount or function() return 0 end
+C_HousingLayout.GetSpentPlacementBudget = C_HousingLayout.GetSpentPlacementBudget or function() return nil end
+C_HousingLayout.GetViewedFloor = C_HousingLayout.GetViewedFloor or function() return 0 end
+C_HousingLayout.HasAnySelections = C_HousingLayout.HasAnySelections or function() return false end
+C_HousingLayout.HasRoomPlacementBudget = C_HousingLayout.HasRoomPlacementBudget or function() return false end
+C_HousingLayout.HasSelectedBlueprintFloorplan = C_HousingLayout.HasSelectedBlueprintFloorplan or function() return false end
+C_HousingLayout.HasSelectedDoor = C_HousingLayout.HasSelectedDoor or function() return false end
+C_HousingLayout.HasSelectedFloorplan = C_HousingLayout.HasSelectedFloorplan or function() return false end
+C_HousingLayout.HasSelectedRoom = C_HousingLayout.HasSelectedRoom or function() return false end
+C_HousingLayout.HasStairs = C_HousingLayout.HasStairs or function() return false end
+C_HousingLayout.HasValidConnection = C_HousingLayout.HasValidConnection or function() return false end
+C_HousingLayout.IsBaseRoom = C_HousingLayout.IsBaseRoom or function() return false end
+C_HousingLayout.IsDraggingRoom = C_HousingLayout.IsDraggingRoom or function() return false, false end
+C_HousingLayout.MoveDraggedRoom = C_HousingLayout.MoveDraggedRoom or function() end
+C_HousingLayout.MoveLayoutCamera = C_HousingLayout.MoveLayoutCamera or function() end
+C_HousingLayout.RemoveRoom = C_HousingLayout.RemoveRoom or function() end
+C_HousingLayout.RoomHasStairs = C_HousingLayout.RoomHasStairs or function() return false end
+C_HousingLayout.RotateFocusedRoom = C_HousingLayout.RotateFocusedRoom or function() end
+C_HousingLayout.RotateRoom = C_HousingLayout.RotateRoom or function() end
+C_HousingLayout.SelectFloorplan = C_HousingLayout.SelectFloorplan or function() end
+C_HousingLayout.SetViewedFloor = C_HousingLayout.SetViewedFloor or function() end
+C_HousingLayout.StartDrag = C_HousingLayout.StartDrag or function() end
+C_HousingLayout.StopDrag = C_HousingLayout.StopDrag or function() end
+C_HousingLayout.StopDraggingRoom = C_HousingLayout.StopDraggingRoom or function() end
+C_HousingLayout.ZoomLayoutCamera = C_HousingLayout.ZoomLayoutCamera or function() return false end
+
+C_HousingBlueprint = C_HousingBlueprint or {}
+C_HousingBlueprint.CanExportRoom = C_HousingBlueprint.CanExportRoom or function() return false end
+C_HousingBlueprint.CanExportTypeFromCurrentLocation = C_HousingBlueprint.CanExportTypeFromCurrentLocation or function() return false end
+C_HousingBlueprint.CanImportTypeFromCurrentLocation = C_HousingBlueprint.CanImportTypeFromCurrentLocation or function() return false end
+C_HousingBlueprint.DeleteBlueprint = C_HousingBlueprint.DeleteBlueprint or function() end
+C_HousingBlueprint.ExportBlueprint = C_HousingBlueprint.ExportBlueprint or function() end
+C_HousingBlueprint.ExportRoomBlueprint = C_HousingBlueprint.ExportRoomBlueprint or function() end
+C_HousingBlueprint.GetBlueprintHyperlink = C_HousingBlueprint.GetBlueprintHyperlink or function() return "" end
+C_HousingBlueprint.GetBlueprintTypeForCode = C_HousingBlueprint.GetBlueprintTypeForCode or function() return nil end
+C_HousingBlueprint.GetExportAvailability = C_HousingBlueprint.GetExportAvailability or function() return nil end
+C_HousingBlueprint.GetFeatureAvailability = C_HousingBlueprint.GetFeatureAvailability or function() return nil end
+C_HousingBlueprint.GetImportAvailability = C_HousingBlueprint.GetImportAvailability or function() return nil end
+C_HousingBlueprint.ImportBlueprint = C_HousingBlueprint.ImportBlueprint or function() end
+C_HousingBlueprint.IsShareCodeValid = C_HousingBlueprint.IsShareCodeValid or function() return false end
+C_HousingBlueprint.RenameBlueprint = C_HousingBlueprint.RenameBlueprint or function() end
+C_HousingBlueprint.RequestBlueprintCollection = C_HousingBlueprint.RequestBlueprintCollection or function() end
+C_HousingBlueprint.RequestBlueprintContents = C_HousingBlueprint.RequestBlueprintContents or function() end
+C_HousingBlueprint.RequestBlueprintContentsForContext = C_HousingBlueprint.RequestBlueprintContentsForContext or function() end
+C_HousingBlueprint.StartImportRoomBlueprint = C_HousingBlueprint.StartImportRoomBlueprint or function() end
+C_HousingBlueprint.UpdateBlueprintStringFromInput = C_HousingBlueprint.UpdateBlueprintStringFromInput or function() return "" end
+
+C_HousingExpertMode = C_HousingExpertMode or {}
+C_HousingExpertMode.CancelActiveEditing = C_HousingExpertMode.CancelActiveEditing or function() end
+C_HousingExpertMode.CommitDecorMovement = C_HousingExpertMode.CommitDecorMovement or function() end
+C_HousingExpertMode.CommitHouseExteriorPosition = C_HousingExpertMode.CommitHouseExteriorPosition or function() end
+C_HousingExpertMode.GetHoveredDecorInfo = C_HousingExpertMode.GetHoveredDecorInfo or function() return nil end
+C_HousingExpertMode.GetPrecisionSubmode = C_HousingExpertMode.GetPrecisionSubmode or function() return nil end
+C_HousingExpertMode.GetPrecisionSubmodeRestriction = C_HousingExpertMode.GetPrecisionSubmodeRestriction or function() return nil end
+C_HousingExpertMode.GetSelectedDecorInfo = C_HousingExpertMode.GetSelectedDecorInfo or function() return nil end
+C_HousingExpertMode.IsDecorSelected = C_HousingExpertMode.IsDecorSelected or function() return false end
+C_HousingExpertMode.IsGridVisible = C_HousingExpertMode.IsGridVisible or function() return false end
+C_HousingExpertMode.IsHouseExteriorHovered = C_HousingExpertMode.IsHouseExteriorHovered or function() return false end
+C_HousingExpertMode.IsHouseExteriorSelected = C_HousingExpertMode.IsHouseExteriorSelected or function() return false end
+C_HousingExpertMode.IsHoveringDecor = C_HousingExpertMode.IsHoveringDecor or function() return false end
+C_HousingExpertMode.RemoveSelectedDecor = C_HousingExpertMode.RemoveSelectedDecor or function() end
+C_HousingExpertMode.ResetPrecisionChanges = C_HousingExpertMode.ResetPrecisionChanges or function() end
+C_HousingExpertMode.SelectNextRotationAxis = C_HousingExpertMode.SelectNextRotationAxis or function() end
+C_HousingExpertMode.SetGridVisible = C_HousingExpertMode.SetGridVisible or function() end
+C_HousingExpertMode.SetPrecisionIncrementingActive = C_HousingExpertMode.SetPrecisionIncrementingActive or function() end
+C_HousingExpertMode.SetPrecisionSubmode = C_HousingExpertMode.SetPrecisionSubmode or function() end
+
+C_HousingCleanupMode = C_HousingCleanupMode or {}
+C_HousingCleanupMode.GetHoveredDecorInfo = C_HousingCleanupMode.GetHoveredDecorInfo or function() return nil end
+C_HousingCleanupMode.IsHoveringDecor = C_HousingCleanupMode.IsHoveringDecor or function() return false end
+C_HousingCleanupMode.RemoveSelectedDecor = C_HousingCleanupMode.RemoveSelectedDecor or function() end
+
+C_HousingCustomizeMode = C_HousingCustomizeMode or {}
+C_HousingCustomizeMode.ApplyDyeToSelectedDecor = C_HousingCustomizeMode.ApplyDyeToSelectedDecor or function() end
+C_HousingCustomizeMode.ApplyPetToSelectedDecor = C_HousingCustomizeMode.ApplyPetToSelectedDecor or function() end
+C_HousingCustomizeMode.ApplyThemeToRoom = C_HousingCustomizeMode.ApplyThemeToRoom or function() end
+C_HousingCustomizeMode.ApplyThemeToSelectedRoomComponent = C_HousingCustomizeMode.ApplyThemeToSelectedRoomComponent or function() end
+C_HousingCustomizeMode.ApplyWallpaperToAllWalls = C_HousingCustomizeMode.ApplyWallpaperToAllWalls or function() end
+C_HousingCustomizeMode.ApplyWallpaperToSelectedRoomComponent = C_HousingCustomizeMode.ApplyWallpaperToSelectedRoomComponent or function() end
+C_HousingCustomizeMode.CancelActiveEditing = C_HousingCustomizeMode.CancelActiveEditing or function() end
+C_HousingCustomizeMode.ClearDyesForSelectedDecor = C_HousingCustomizeMode.ClearDyesForSelectedDecor or function() end
+C_HousingCustomizeMode.ClearTargetRoomComponent = C_HousingCustomizeMode.ClearTargetRoomComponent or function() end
+C_HousingCustomizeMode.CommitDyesForSelectedDecor = C_HousingCustomizeMode.CommitDyesForSelectedDecor or function() return false end
+C_HousingCustomizeMode.GetHoveredDecorInfo = C_HousingCustomizeMode.GetHoveredDecorInfo or function() return nil end
+C_HousingCustomizeMode.GetHoveredRoomComponentInfo = C_HousingCustomizeMode.GetHoveredRoomComponentInfo or function() return nil end
+C_HousingCustomizeMode.GetNumDyesToRemoveOnSelectedDecor = C_HousingCustomizeMode.GetNumDyesToRemoveOnSelectedDecor or function() return 0 end
+C_HousingCustomizeMode.GetNumDyesToSpendOnSelectedDecor = C_HousingCustomizeMode.GetNumDyesToSpendOnSelectedDecor or function() return 0 end
+C_HousingCustomizeMode.GetPreviewDyesOnSelectedDecor = C_HousingCustomizeMode.GetPreviewDyesOnSelectedDecor or function() return nil end
+C_HousingCustomizeMode.GetRecentlyUsedDyes = C_HousingCustomizeMode.GetRecentlyUsedDyes or function() return nil end
+C_HousingCustomizeMode.GetRecentlyUsedThemeSets = C_HousingCustomizeMode.GetRecentlyUsedThemeSets or function() return nil end
+C_HousingCustomizeMode.GetRecentlyUsedWallpapers = C_HousingCustomizeMode.GetRecentlyUsedWallpapers or function() return nil end
+C_HousingCustomizeMode.GetSelectedDecorInfo = C_HousingCustomizeMode.GetSelectedDecorInfo or function() return nil end
+C_HousingCustomizeMode.GetSelectedDecorPetInfo = C_HousingCustomizeMode.GetSelectedDecorPetInfo or function() return nil, nil end
+C_HousingCustomizeMode.GetSelectedRoomComponentInfo = C_HousingCustomizeMode.GetSelectedRoomComponentInfo or function() return nil end
+C_HousingCustomizeMode.GetThemeSetInfo = C_HousingCustomizeMode.GetThemeSetInfo or function() return nil end
+C_HousingCustomizeMode.GetWallpapersForRoomComponentType = C_HousingCustomizeMode.GetWallpapersForRoomComponentType or function() return nil end
+C_HousingCustomizeMode.IsDecorSelected = C_HousingCustomizeMode.IsDecorSelected or function() return false end
+C_HousingCustomizeMode.IsHouseExteriorDoorHovered = C_HousingCustomizeMode.IsHouseExteriorDoorHovered or function() return false end
+C_HousingCustomizeMode.IsHoveringDecor = C_HousingCustomizeMode.IsHoveringDecor or function() return false end
+C_HousingCustomizeMode.IsHoveringRoomComponent = C_HousingCustomizeMode.IsHoveringRoomComponent or function() return false end
+C_HousingCustomizeMode.IsRoomComponentSelected = C_HousingCustomizeMode.IsRoomComponentSelected or function() return false end
+C_HousingCustomizeMode.RoomComponentSupportsVariant = C_HousingCustomizeMode.RoomComponentSupportsVariant or function() return false end
+C_HousingCustomizeMode.RoomConnectionSupportsDoorType = C_HousingCustomizeMode.RoomConnectionSupportsDoorType or function() return false end
+C_HousingCustomizeMode.SetRoomComponentCeilingType = C_HousingCustomizeMode.SetRoomComponentCeilingType or function() end
+C_HousingCustomizeMode.SetRoomComponentDoorType = C_HousingCustomizeMode.SetRoomComponentDoorType or function() end
 
 secureexecuterange = secureexecuterange or function(values, callback, ...)
     for key, value in pairs(values or {}) do
@@ -342,6 +677,18 @@ Enum = Enum or {}
 Enum.UITextureSliceMode = Enum.UITextureSliceMode or {
     Stretched = 0,
     Tiled = 1,
+}
+Enum.OnUpdateMode = Enum.OnUpdateMode or {
+    Disabled = 0,
+    RunWhenVisible = 1,
+    RunWhenVisibleOnce = 2,
+    RunOnce = 3,
+    RunAlways = 4,
+}
+Enum.TableSecurityOption = Enum.TableSecurityOption or {
+    DisallowTaintedAccess = 0,
+    DisallowSecretKeys = 1,
+    SecretWrapContents = 2,
 }
 
 local function CreateLazyEnum(enumName)
@@ -790,19 +1137,8 @@ string.join = string.join or function(separator, ...)
     return table.concat(values, separator)
 end
 
-string.split = string.split or function(separator, value)
-    local results = {}
-    local start = 1
-    while true do
-        local first, last = string.find(value, separator, start, true)
-        if not first then
-            table.insert(results, string.sub(value, start))
-            break
-        end
-        table.insert(results, string.sub(value, start, first - 1))
-        start = last + 1
-    end
-    return unpack(results)
+string.split = string.split or function(delimiters, value, pieces)
+    return unpack(strsplittable(delimiters, value, pieces))
 end
 
 strsplit = strsplit or string.split

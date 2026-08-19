@@ -34,6 +34,8 @@ internal sealed partial class WowStringUtilApi : LuaApiModule
             ["Format"] = state => Dispatch(state, "Format"),
             ["FormatZero"] = state => Dispatch(state, "FormatZero"),
             ["GetApproximationSeconds"] = state => Dispatch(state, "GetApproximationSeconds"),
+            ["GetRounding"] = state => Dispatch(state, "GetRounding"),
+            ["SetRounding"] = state => Dispatch(state, "SetRounding"),
             ["GetConvertToLower"] = state => Dispatch(state, "GetConvertToLower"),
             ["GetDefaultAbbreviation"] = state => Dispatch(state, "GetDefaultAbbreviation"),
             ["GetDesiredUnitCount"] = state => Dispatch(state, "GetDesiredUnitCount"),
@@ -202,6 +204,9 @@ internal sealed partial class WowStringUtilApi : LuaApiModule
         SetEnum(state, "SecondsFormatterInterval",
             ("Seconds", 0), ("Minutes", 1), ("Hours", 2), ("Days", 3));
         SetEnumMeta(state, "SecondsFormatterIntervalMeta", 4, 0, 3);
+        SetEnum(state, "SecondsFormatterRounding",
+            ("RoundUp", 0), ("Truncate", 1));
+        SetEnumMeta(state, "SecondsFormatterRoundingMeta", 2, 0, 1);
         SetEnum(state, "SecondsFormatterIntervalWhitespace",
             ("Preserve", 0), ("Strip", 1), ("StripIgnoreLocale", 2));
         SetEnumMeta(state, "SecondsFormatterIntervalWhitespaceMeta", 3, 0, 2);
@@ -384,6 +389,14 @@ internal sealed partial class WowStringUtilApi : LuaApiModule
                     return luaL_error(state, usage);
                 formatter!.Whitespace = (SecondsFormatterIntervalWhitespace)whitespace;
                 return 0;
+            case "SetRounding":
+                if (!TryReadRequiredEnum(state, 2, 1, out var rounding))
+                    return luaL_error(state, usage);
+                formatter!.Rounding = (SecondsFormatterRounding)rounding;
+                return 0;
+            case "GetRounding":
+                lua_pushinteger(state, (int)formatter!.Rounding);
+                return 1;
             case "SetDesiredUnitCount":
                 if (!TryReadRequiredByte(state, 2, out var count))
                     return luaL_error(state, usage);

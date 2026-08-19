@@ -11349,7 +11349,7 @@ public sealed class LuaRuntimeTests
         using var session = new EmulatorSession();
 
         Assert.Equal(
-            "34:0:100:22:300:false:false:false:false:0:false:0:3",
+            "36:0:100:22:300:false:false:false:false:0:false:0:3",
             session.Lua.Evaluate(
                 "local settings=C_EditMode.GetAccountSettings(); " +
                 "local ready,battleground=GetLFGReadyCheckUpdate(); " +

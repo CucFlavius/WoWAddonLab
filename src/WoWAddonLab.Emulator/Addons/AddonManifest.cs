@@ -142,10 +142,12 @@ public sealed record AddonManifest(
         return !excludedLocales.Any(context.MatchesTextLocale);
     }
 
+    private static readonly char[] ConditionSeparators = [' ', '\t', ','];
+
     private static string[] ConditionValues(Regex regex, string conditions) =>
         regex.Matches(conditions)
             .SelectMany(match => match.Groups[1].Value.Split(
-                ',',
+                ConditionSeparators,
                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .ToArray();
 }

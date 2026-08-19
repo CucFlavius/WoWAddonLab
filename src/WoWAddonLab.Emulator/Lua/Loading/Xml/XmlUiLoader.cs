@@ -10,7 +10,8 @@ internal sealed class XmlUiLoader
 {
     private static readonly HashSet<string> ObjectElements = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Frame", "Browser", "Button", "CheckButton", "EditBox", "ScrollFrame", "Slider",
+        "Frame", "AuraContainer", "AuraButton",
+        "Browser", "Button", "CheckButton", "EditBox", "ScrollFrame", "Slider",
         "StatusBar", "GameTooltip", "MessageFrame", "ScrollingMessageFrame",
         "SimpleHTML", "Model", "PlayerModel", "DressUpModel", "TabardModel",
         "ModelScene", "Actor", "Cooldown", "ColorSelect", "Minimap", "WorldFrame",
@@ -28,7 +29,13 @@ internal sealed class XmlUiLoader
         "LineScale", "VertexColor", "Path", "ControlPoint"
     };
 
+    private static readonly HashSet<string> NativeIntrinsicObjectTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AuraContainer", "AuraButton"
+    };
+
     private readonly LuaRuntime _runtime;
+    private readonly HashSet<int> _nativeIntrinsicLoads = [];
     private readonly Dictionary<string, XmlTemplate> _templates =
         new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, XmlTemplate> _intrinsics =
@@ -201,6 +208,7 @@ internal sealed class XmlUiLoader
     {
         var objectWatermark = _runtime.Ui.LastObjectId;
         var applied = false;
+        RegisterNativeIntrinsicLoad(value);
         var stack = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var parentKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var parentArrays = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -387,6 +395,7 @@ internal sealed class XmlUiLoader
             drawLayer,
             subLevel);
         value.SourceLocation = sourcePath;
+        RegisterNativeIntrinsicLoad(value);
         ApplyCreationAttributes(value, element);
         if (name is not null)
             LuaBindings.SetGlobalObject(_runtime, value);
@@ -542,6 +551,7 @@ internal sealed class XmlUiLoader
 
         _runtime.ApplyGlobalMixins(value, Attribute(element, "mixin"));
         _runtime.ApplyGlobalMixins(value, Attribute(element, "secureMixin"));
+        ApplyMixinElements(value, element);
         ApplyAttributes(value, element);
 
         foreach (var child in element.Elements())
@@ -726,6 +736,46 @@ internal sealed class XmlUiLoader
                      child => child.Name.LocalName.Equals("KeyValues", StringComparison.OrdinalIgnoreCase)))
         {
             ApplyKeyValues(value, keyValues, sourcePath);
+        }
+    }
+
+    private void RegisterNativeIntrinsicLoad(UiObject value)
+    {
+        if (!NativeIntrinsicObjectTypes.Contains(value.ObjectType) ||
+            !_nativeIntrinsicLoads.Add(value.Id))
+        {
+            return;
+        }
+
+        const string body =
+            "local callback = self[\"OnLoad_Intrinsic\"]; " +
+            "if callback then return callback(self, ...) end";
+        var reference = _runtime.CompileXmlScript(
+            XmlEventLocals("OnLoad") + body,
+            "@intrinsic:OnLoad_Intrinsic");
+        AddXmlScript(
+            value,
+            "OnLoad",
+            reference,
+            null,
+            null,
+            "intrinsic",
+            true);
+    }
+
+    private void ApplyMixinElements(UiObject value, XElement element)
+    {
+        foreach (var mixins in element.Elements().Where(
+                     child => child.Name.LocalName.Equals("Mixins", StringComparison.OrdinalIgnoreCase)))
+        {
+            foreach (var mixin in mixins.Elements().Where(
+                         child => child.Name.LocalName.Equals("Mixin", StringComparison.OrdinalIgnoreCase)))
+            {
+                _runtime.ApplyGlobalMixins(
+                    value,
+                    Attribute(mixin, "key"),
+                    string.Equals(Attribute(mixin, "source"), "secure", StringComparison.OrdinalIgnoreCase));
+            }
         }
     }
 

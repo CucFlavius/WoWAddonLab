@@ -27,6 +27,7 @@ internal sealed class WowSpellApi : LuaApiModule
         "IsSpellDisabled", "IsSpellHarmful", "IsSpellHelpful", "IsSpellImportant",
         "IsSpellInRange", "IsSpellPassive", "IsSpellUsable", "PickupSpell",
         "RequestLoadSpellData", "SetSpellAutoCastEnabled", "SpellHasRange",
+        "TargetSpellChecksItemCondition",
         "TargetSpellIsEnchanting", "TargetSpellJumpsUpgradeTrack",
         "TargetSpellReplacesBonusTree", "ToggleSpellAutoCast"
     ];
@@ -479,6 +480,8 @@ internal sealed class WowSpellApi : LuaApiModule
             }
             case "SpellHasRange":
                 return PushDefinitionBoolean(state, spells, static value => value.HasRange);
+            case "TargetSpellChecksItemCondition":
+                return PushBoolean(state, spells.TargetSpellChecksItemCondition);
             case "TargetSpellIsEnchanting":
                 return PushBoolean(state, spells.TargetSpellIsEnchanting);
             case "TargetSpellJumpsUpgradeTrack":

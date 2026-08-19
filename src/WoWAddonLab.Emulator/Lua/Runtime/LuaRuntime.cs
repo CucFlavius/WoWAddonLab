@@ -893,6 +893,7 @@ public sealed class LuaRuntime : IDisposable
                 SetAddonLocalTableReference(manifest.Name, privateTableReference);
             try
             {
+                var secureEnvironmentFiles = SecureEnvironmentFiles(manifest);
                 using (StartupTimeline.Begin("TOC files", "addon-phase"))
                 {
                     foreach (var file in manifest.Files)
@@ -900,22 +901,33 @@ public sealed class LuaRuntime : IDisposable
                         if (!File.Exists(file))
                             throw new FileNotFoundException($"TOC file entry was not found: {file}");
 
-                        var extension = Path.GetExtension(file);
-                        if (extension.Equals(".lua", StringComparison.OrdinalIgnoreCase))
+                        var fileEnvironmentReference = secureEnvironmentFiles.Contains(file)
+                            ? EnsureSecureEnvironment()
+                            : _currentAddonEnvironmentReference;
+                        var restoreEnvironmentReference = SwapAddonEnvironment(fileEnvironmentReference);
+                        try
                         {
-                            TryExecuteAddonFile(file, manifest, privateTableReference);
-                            continue;
-                        }
+                            var extension = Path.GetExtension(file);
+                            if (extension.Equals(".lua", StringComparison.OrdinalIgnoreCase))
+                            {
+                                TryExecuteAddonFile(file, manifest, privateTableReference);
+                                continue;
+                            }
 
-                        if (extension.Equals(".xml", StringComparison.OrdinalIgnoreCase))
+                            if (extension.Equals(".xml", StringComparison.OrdinalIgnoreCase))
+                            {
+                                TryExecuteXmlFile(file, manifest, privateTableReference, []);
+                                continue;
+                            }
+
+                            Log.Warn(
+                                "loader",
+                                $"Unsupported TOC entry was skipped: {Path.GetRelativePath(manifest.RootPath, file)}.");
+                        }
+                        finally
                         {
-                            TryExecuteXmlFile(file, manifest, privateTableReference, []);
-                            continue;
+                            SwapAddonEnvironment(restoreEnvironmentReference);
                         }
-
-                        Log.Warn(
-                            "loader",
-                            $"Unsupported TOC entry was skipped: {Path.GetRelativePath(manifest.RootPath, file)}.");
                     }
                 }
             }
@@ -1246,10 +1258,14 @@ public sealed class LuaRuntime : IDisposable
                 value.AnimationGroup is null &&
                 value.Animation is null &&
                 value.ScriptReferences.ContainsKey("OnUpdate") &&
-                Ui.IsVisible(value))
+                ShouldRunOnUpdate(value))
             .ToArray();
         foreach (var frame in frames)
+        {
+            if (frame.OnUpdateMode is UiOnUpdateMode.RunWhenVisibleOnce or UiOnUpdateMode.RunOnce)
+                frame.OnUpdateMode = UiOnUpdateMode.Disabled;
             InvokeScript(frame, "OnUpdate", delta);
+        }
 
         FlushPendingEditBoxTextChanges();
 
@@ -1259,6 +1275,13 @@ public sealed class LuaRuntime : IDisposable
         LuaBindings.TickMessageFrames(this, (float)delta);
         LuaBindings.UpdateSimpleModelTransforms(this);
     }
+
+    private bool ShouldRunOnUpdate(UiObject value) => value.OnUpdateMode switch
+    {
+        UiOnUpdateMode.Disabled => false,
+        UiOnUpdateMode.RunAlways or UiOnUpdateMode.RunOnce => true,
+        _ => Ui.IsVisible(value)
+    };
 
     public void QueueEditBoxTextChanged(UiObject value, bool userInput)
     {
@@ -2482,15 +2505,18 @@ public sealed class LuaRuntime : IDisposable
     internal void ClearScripts(UiObject value) =>
         _xmlUiLoader.ClearScripts(value);
 
-    internal void ApplyGlobalMixins(UiObject value, string? mixinNames)
+    internal void ApplyGlobalMixins(UiObject value, string? mixinNames, bool fromSecureEnvironment = false)
     {
         if (string.IsNullOrWhiteSpace(mixinNames))
             return;
+        var environmentReference = fromSecureEnvironment
+            ? EnsureSecureEnvironment()
+            : _currentAddonEnvironmentReference;
         foreach (var mixinName in mixinNames.Split(
                      ',',
                      StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
         {
-            if (!TryApplyGlobalMixin(value, mixinName, _currentAddonEnvironmentReference))
+            if (!TryApplyGlobalMixin(value, mixinName, environmentReference))
             {
                 if (!_pendingGlobalMixins.TryGetValue(value.Id, out var pending))
                 {
@@ -2499,11 +2525,11 @@ public sealed class LuaRuntime : IDisposable
                 }
                 if (!pending.Any(item =>
                         item.Name.Equals(mixinName, StringComparison.Ordinal) &&
-                        item.EnvironmentReference == _currentAddonEnvironmentReference))
+                        item.EnvironmentReference == environmentReference))
                 {
                     pending.Add(new PendingGlobalMixin(
                         mixinName,
-                        _currentAddonEnvironmentReference));
+                        environmentReference));
                 }
             }
         }
@@ -4110,6 +4136,22 @@ public sealed class LuaRuntime : IDisposable
 
     private string CharacterSavedVariablesPath(AddonManifest manifest) =>
         Path.Combine(SavedVariablesDirectory, "Character", $"{manifest.Name}.lua");
+
+    private static IReadOnlySet<string> SecureEnvironmentFiles(AddonManifest manifest)
+    {
+        if (!manifest.Metadata.TryGetValue("SecureEnvironmentFiles", out var value) ||
+            string.IsNullOrWhiteSpace(value))
+        {
+            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(entry => Path.GetFullPath(Path.Combine(
+                manifest.RootPath,
+                entry.Replace('\\', Path.DirectorySeparatorChar))))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
 
     private static bool IsTrueMetadata(AddonManifest manifest, string key) =>
         manifest.Metadata.TryGetValue(key, out var value) &&

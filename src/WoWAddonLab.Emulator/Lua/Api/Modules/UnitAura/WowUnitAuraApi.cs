@@ -237,11 +237,14 @@ internal sealed class WowUnitAuraApi : LuaApiModule
         if (!TryReadRequiredStringField(state, 1, "unitToken", out var unitToken) ||
             !TryReadRequiredUInt32Field(state, 1, "auraIndex", out var auraIndex) ||
             !TryReadRequiredObjectField(runtime, state, 1, "parent", out var parent) ||
-            !WowWidgetApi.IsFrameWidget(parent.ObjectType) ||
-            !TryReadRequiredBooleanField(state, 1, "showCountdownFrame", out var showCountdownFrame) ||
-            !TryReadRequiredBooleanField(state, 1, "showCountdownNumbers", out var showCountdownNumbers) ||
-            !TryReadRequiredBooleanField(state, 1, "isContainer", out var isContainer))
+            !WowWidgetApi.IsFrameWidget(parent.ObjectType))
             return luaL_error(state, AddPrivateAuraAnchorUsage);
+
+        var showCountdownFrame =
+            ReadOptionalBooleanField(state, 1, "showCooldownFrame") ||
+            ReadOptionalBooleanField(state, 1, "showCountdownFrame");
+        var showCountdownNumbers = ReadOptionalBooleanField(state, 1, "showCountdownNumbers");
+        var isContainer = ReadOptionalBooleanField(state, 1, "isContainer");
 
         WowAuraAnchorPointState? iconAnchor = null;
         double? iconWidth = null;
@@ -672,6 +675,9 @@ internal sealed class WowUnitAuraApi : LuaApiModule
         lua_pop(state, 1);
         return valid;
     }
+
+    private static bool ReadOptionalBooleanField(lua_State state, int tableIndex, string name) =>
+        TryReadRequiredBooleanField(state, tableIndex, name, out var value) && value;
 
     private static bool TryReadRequiredBooleanField(
         lua_State state,

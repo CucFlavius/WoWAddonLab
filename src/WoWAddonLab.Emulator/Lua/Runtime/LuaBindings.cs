@@ -1619,6 +1619,52 @@ internal static class LuaBindings
                     value.FrameId = frameId;
                     return 0;
                 }
+            case "SetRolesets":
+                {
+                    value.Rolesets.Clear();
+                    if (TryReadOptionalString(state, 2, out var rolesetsString) &&
+                        rolesetsString is not null)
+                    {
+                        foreach (var roleset in rolesetsString.Split(
+                                     ',',
+                                     StringSplitOptions.RemoveEmptyEntries |
+                                     StringSplitOptions.TrimEntries))
+                        {
+                            value.Rolesets.Add(roleset);
+                        }
+                    }
+                    return 0;
+                }
+            case "AddRoleset":
+                {
+                    if (!TryReadRequiredString(state, 2, out var addedRoleset))
+                        return luaL_error(state, "Usage: self:AddRoleset(roleset)");
+                    value.Rolesets.Add(addedRoleset);
+                    return 0;
+                }
+            case "RemoveRoleset":
+                {
+                    if (!TryReadRequiredString(state, 2, out var removedRoleset))
+                        return luaL_error(state, "Usage: self:RemoveRoleset(roleset)");
+                    value.Rolesets.Remove(removedRoleset);
+                    return 0;
+                }
+            case "GetRolesetNames":
+                {
+                    lua_newtable(state);
+                    var rolesetIndex = 1;
+                    foreach (var roleset in value.Rolesets.OrderBy(
+                                 name => name,
+                                 StringComparer.OrdinalIgnoreCase))
+                    {
+                        lua_pushstring(state, roleset);
+                        lua_rawseti(state, -2, rolesetIndex++);
+                    }
+                    return 1;
+                }
+            case "IsRolesetFiltered":
+                lua_pushboolean(state, 0);
+                return 1;
             case "SetScale":
                 {
                     if (value.Animation is { } setScaleAnimationState)
@@ -5300,6 +5346,14 @@ internal static class LuaBindings
             case "IsGamePadStickEnabled":
                 lua_pushboolean(state, value.GamePadStickEnabled ? 1 : 0);
                 return 1;
+            case "GetOnUpdateMode":
+                lua_pushnumber(state, (int)value.OnUpdateMode);
+                return 1;
+            case "SetOnUpdateMode":
+                if (lua_isnumber(state, 2) == 0)
+                    return luaL_error(state, "Usage: self:SetOnUpdateMode(onUpdateMode)");
+                value.OnUpdateMode = (UiOnUpdateMode)(int)lua_tonumber(state, 2);
+                return 0;
             case "GetPropagateKeyboardInput":
                 lua_pushboolean(state, value.PropagateKeyboardInput ? 1 : 0);
                 return 1;
@@ -10185,7 +10239,9 @@ internal static class LuaBindings
             "ShowEncounterEvents",
             "ShowDamageMeter",
             "ShowExternalDefensives",
-            "ShowTotemActionBar"
+            "ShowRaidWarning",
+            "ShowTotemActionBar",
+            "ShowLossOfControl"
         ];
         for (var index = 0; index < accountSettingNames.Length; index++)
             SetTableNumber(state, accountSettingNames[index], index);

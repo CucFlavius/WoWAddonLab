@@ -6,6 +6,7 @@ namespace WoWAddonLab.Emulator.Lua;
 public sealed class WowClickBindingsState
 {
     public bool TutorialShown { get; set; }
+    public bool InBindingMode { get; set; }
     public bool AssumePositiveSpellIdsAreClickBindable { get; set; } = true;
     public ISet<int> ClickBindableSpellIds { get; } = new HashSet<int>();
     public ISet<int> NonClickBindableSpellIds { get; } = new HashSet<int>();

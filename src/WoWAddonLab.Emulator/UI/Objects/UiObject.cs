@@ -69,6 +69,7 @@ public sealed class UiObject
     public bool PreventsSecretValues { get; set; }
     public bool ObjectLoaded { get; set; } = true;
     public bool PropagateKeyboardInput { get; set; }
+    public UiOnUpdateMode OnUpdateMode { get; set; } = UiOnUpdateMode.RunWhenVisible;
     public bool PropagateMouseClicks { get; set; }
     public bool PropagateMouseMotion { get; set; }
     public bool DontSavePosition { get; set; }
@@ -195,6 +196,8 @@ public sealed class UiObject
     private byte _alphaByte = byte.MaxValue;
 
     internal UiSystem? Owner { get; set; }
+
+    public HashSet<string> Rolesets { get; } = new(StringComparer.OrdinalIgnoreCase);
     public UiLineState? Line { get; set; }
 
     public static string? NormalizeMouseButtonName(string? button)

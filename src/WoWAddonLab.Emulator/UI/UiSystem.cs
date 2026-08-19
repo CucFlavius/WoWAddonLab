@@ -238,6 +238,7 @@ public sealed class UiSystem
         switch (objectType.ToLowerInvariant())
         {
             case "button":
+            case "aurabutton":
             case "checkbutton":
             case "dropdownbutton":
             case "dropdowntogglebutton":

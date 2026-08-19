@@ -10,7 +10,7 @@ public sealed class SpellContractTests
         using var session = new EmulatorSession();
 
         Assert.Equal(
-            "62:false:2:0:0:7:7:0:0:0:2:0:0:400:1:nil:" +
+            "63:false:2:0:0:7:7:0:0:0:2:0:0:400:1:nil:" +
             "0:1:2:3:0:2:133",
             session.Lua.Evaluate(
                 "local count=0; for _ in pairs(C_Spell) do count=count+1 end;" +
