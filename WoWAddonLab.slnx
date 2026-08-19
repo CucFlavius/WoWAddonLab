@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WoWAddonLab/WoWAddonLab.csproj" />
+    <Project Path="src/WoWAddonLab.Emulator/WoWAddonLab.Emulator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WoWAddonLab.Tests/WoWAddonLab.Tests.csproj" />
+  </Folder>
+  <Folder Name="/vendor/">
+    <Project Path="vendor/TACTSharp/TACTSharp.csproj" />
+  </Folder>
+</Solution>

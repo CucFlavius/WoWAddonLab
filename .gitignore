@@ -1,0 +1,53 @@
+# Build output
+**/bin/
+**/obj/
+TestResults/
+
+# Editors, IDEs and assistant tooling
+.idea/
+.vs/
+.vscode/
+.junie/
+AGENTS.md
+*.user
+*.suo
+*.bak
+
+# Personal docs
+docs/
+
+# Emulator runtime state
+imgui.ini
+
+# Downloaded and derived caches.
+cache/
+
+# Scratch space for probes and one-off harnesses
+.tmp/
+artifacts/
+
+# DB2 definitions are pulled from wowdev/WoWDBDefs on first launch and refreshed
+# when a product moves to a new build, so they are never committed.
+data/dbd/
+
+# Reverse engineering databases
+*.i64
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+
+# Profiles and traces
+*.nettrace
+*.speedscope.json
+*.etl
+*.diagsession
+
+# Logs
+*.log
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini

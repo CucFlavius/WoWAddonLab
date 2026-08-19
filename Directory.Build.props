@@ -1,0 +1,15 @@
+<Project>
+
+  <!--
+    Build output lands in bin/ and obj/ beside src/ rather than inside each project directory.
+    Both are set here rather than through UseArtifactsOutput because ArtifactsPath cannot point at
+    the repository root: the SDK adds it to DefaultItemExcludes, which would exclude every source
+    file in the tree. Note that the asset cache lives at AppContext.BaseDirectory/cache, so moving
+    this path starts the caches cold.
+  -->
+  <PropertyGroup>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)bin\$(MSBuildProjectName)\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+
+</Project>

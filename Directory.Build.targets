@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <WoWLuaRuntime>$(MSBuildThisFileDirectory)native\lua515\win-x64\lua515.dll</WoWLuaRuntime>
+  </PropertyGroup>
+
+  <Target Name="CopyWoWLuaRuntime"
+          AfterTargets="CopyFilesToOutputDirectory"
+          Condition="'$(OS)' == 'Windows_NT' and Exists('$(WoWLuaRuntime)')">
+    <MakeDir Directories="$(OutDir)runtimes\win-x64\native" />
+    <Copy SourceFiles="$(WoWLuaRuntime)"
+          DestinationFiles="$(OutDir)runtimes\win-x64\native\lua515.dll"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>
