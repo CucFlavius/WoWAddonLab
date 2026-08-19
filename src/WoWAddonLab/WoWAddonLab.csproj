@@ -2,7 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WoWAddonLab.Emulator\WoWAddonLab.Emulator.csproj" />
-    <ProjectReference Include="..\..\vendor\TACTSharp\TACTSharp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -12,6 +11,7 @@
     <PackageReference Include="Silk.NET.OpenGL.Extensions.ImGui" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Windowing" Version="2.23.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="TACTSharp" Version="0.0.15-alpha" />
     <PackageReference Include="TinyBCSharp" Version="0.1.2" />
   </ItemGroup>
 

@@ -6,7 +6,4 @@
   <Folder Name="/tests/">
     <Project Path="tests/WoWAddonLab.Tests/WoWAddonLab.Tests.csproj" />
   </Folder>
-  <Folder Name="/vendor/">
-    <Project Path="vendor/TACTSharp/TACTSharp.csproj" />
-  </Folder>
 </Solution>
