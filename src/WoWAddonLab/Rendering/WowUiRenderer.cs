@@ -1368,18 +1368,14 @@ public sealed class WowUiRenderer : IDisposable
         var framebufferScale = ImGui.GetIO().DisplayFramebufferScale;
         var framebufferScaleX = Math.Max(framebufferScale.X, 1e-6f);
         var framebufferScaleY = Math.Max(framebufferScale.Y, 1e-6f);
-        var physicalPixelsPerUiUnit = effectiveScale * scale * framebufferScaleY;
-        var rasterFontSize = UiTextLineMetrics.ResolvePhysicalRasterHeight(
+        var layoutLineHeight = UiTextLineMetrics.ResolveLogicalLineHeight(
             font.FontSize,
             font.TextScale,
-            physicalPixelsPerUiUnit);
-        var fontSize = UiTextLineMetrics.ResolvePhysicalRenderHeight(
-                           font.FontSize,
-                           font.TextScale,
-                           physicalPixelsPerUiUnit,
-                           value.FontSmoothScaling) /
-                       framebufferScaleY *
-                       value.FontAnimationFontSizeScale;
+            ui.PhysicalHeight,
+            ui.EffectiveScale(value),
+            value.FontSmoothScaling);
+        var fontSize = layoutLineHeight * scale * value.FontAnimationFontSizeScale;
+        var rasterFontSize = fontSize * framebufferScaleY;
         if (!(rasterFontSize > 0) || !(fontSize > 0))
             return;
         var continuationIndent = font.IndentedWordWrap
@@ -1387,7 +1383,16 @@ public sealed class WowUiRenderer : IDisposable
             : 0;
         var renderFont = _fonts.Select(font.FontPath, rasterFontSize);
         var imguiFont = renderFont.Font;
-        var glyphFontSize = renderFont.GlyphSize * fontSize / rasterFontSize;
+        var glyphFontSize = renderFont.GlyphSize *
+                            fontSize /
+                            MathF.Max(renderFont.PixelSize, 1e-6f);
+        var layoutMeasure = LayoutTextMeasure(
+            ui,
+            font,
+            layoutLineHeight,
+            scale,
+            imguiFont,
+            glyphFontSize);
         var textBounds = ui.ResolveTextBounds(value);
         var widthConstrained = UiSystem.IsWidthConstrained(value);
         var heightConstrained = UiSystem.IsHeightConstrained(value);
@@ -1418,8 +1423,7 @@ public sealed class WowUiRenderer : IDisposable
                     {
                         candidateLines = WrapColorLines(
                             candidateLines,
-                            imguiFont,
-                            glyphFontSize,
+                            layoutMeasure,
                             availableWidth,
                             continuationIndent,
                             font.NonSpaceWrap);
@@ -1429,11 +1433,8 @@ public sealed class WowUiRenderer : IDisposable
 
                     var candidateWidth = candidateLines
                         .Select((line, index) =>
-                            imguiFont.CalcTextSizeA(
-                                glyphFontSize,
-                                float.MaxValue,
-                                0,
-                                string.Concat(line.Select(span => span.Text))).X +
+                            layoutMeasure(
+                                string.Concat(line.Select(span => span.Text))) +
                             (index > 0 ? continuationIndent : 0))
                         .DefaultIfEmpty(0)
                         .Max();
@@ -1452,8 +1453,7 @@ public sealed class WowUiRenderer : IDisposable
         {
             lines = WrapColorLines(
                 lines,
-                imguiFont,
-                glyphFontSize,
+                layoutMeasure,
                 textBounds.Width * scale,
                 continuationIndent,
                 font.NonSpaceWrap);
@@ -2132,10 +2132,31 @@ public sealed class WowUiRenderer : IDisposable
         return lines;
     }
 
+    private static Func<string, float> LayoutTextMeasure(
+        UiSystem ui,
+        UiFontState font,
+        float layoutLineHeight,
+        float scale,
+        ImFontPtr imguiFont,
+        float glyphFontSize)
+    {
+        if (!(layoutLineHeight > 0))
+        {
+            return text => imguiFont.CalcTextSizeA(
+                glyphFontSize,
+                float.MaxValue,
+                0,
+                text).X;
+        }
+
+        return text => ui.MeasureTextAdvance(font, text, layoutLineHeight) * scale;
+    }
+
+    private const float WrapWidthTolerance = 0.001f;
+
     private static List<List<WowTextSpan>> WrapColorLines(
         IReadOnlyList<List<WowTextSpan>> source,
-        ImFontPtr font,
-        float fontSize,
+        Func<string, float> measure,
         float maximumWidth,
         float continuationIndent,
         bool nonSpaceWrap)
@@ -2152,7 +2173,8 @@ public sealed class WowUiRenderer : IDisposable
                 Math.Max(
                     0,
                     maximumWidth -
-                    (result.Count > 0 ? continuationIndent : 0));
+                    (result.Count > 0 ? continuationIndent : 0)) +
+                WrapWidthTolerance;
 
             void StartLine()
             {
@@ -2169,7 +2191,7 @@ public sealed class WowUiRenderer : IDisposable
                     line[^1] = line[^1] with { Text = line[^1].Text + text };
                 else
                     line.Add(new WowTextSpan(text, argb));
-                lineWidth += font.CalcTextSizeA(fontSize, float.MaxValue, 0, text).X;
+                lineWidth += measure(text);
             }
 
             foreach (var span in sourceLine)
@@ -2180,11 +2202,7 @@ public sealed class WowUiRenderer : IDisposable
                     if (whitespace && line.Count == 0)
                         continue;
 
-                    var tokenWidth = font.CalcTextSizeA(
-                        fontSize,
-                        float.MaxValue,
-                        0,
-                        token).X;
+                    var tokenWidth = measure(token);
                     if (line.Count > 0 &&
                         lineWidth + tokenWidth > CurrentMaximumWidth())
                     {
@@ -2200,11 +2218,7 @@ public sealed class WowUiRenderer : IDisposable
                         foreach (var character in token)
                         {
                             var text = character.ToString();
-                            var characterWidth = font.CalcTextSizeA(
-                                fontSize,
-                                float.MaxValue,
-                                0,
-                                text).X;
+                            var characterWidth = measure(text);
                             if (line.Count > 0 &&
                                 lineWidth + characterWidth >
                                 CurrentMaximumWidth())

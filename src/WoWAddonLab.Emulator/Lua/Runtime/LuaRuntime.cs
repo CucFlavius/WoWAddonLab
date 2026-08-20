@@ -401,6 +401,7 @@ public sealed class LuaRuntime : IDisposable
                     lua_pushstring(State, text);
                     lua_setglobal(State, name);
                 }
+                ApplyMissingGlobalStringPlaceholders(strings);
                 break;
             case WowDataProviderKind.Spell:
                 Spells.SetProvider(Providers.Spell);
@@ -698,6 +699,43 @@ public sealed class LuaRuntime : IDisposable
                     "@bootstrap-fallback-finally");
             }
         }
+    }
+
+    private static readonly string[] InterfaceGlobalStringTags =
+    [
+        "BLOCK_REDUCED",
+        "OPTION_TOOLTIP_SOCIAL_DISCONNECT_DISCORD",
+        "OPTION_TOOLTIP_SOCIAL_DISCORD_DISPLAY_NAME",
+        "OPTION_TOOLTIP_SOCIAL_DISCORD_DISPLAY_NAME_OPTION_DEFAULT",
+        "OPTION_TOOLTIP_SOCIAL_DISCORD_DISPLAY_NAME_OPTION_GLOBAL_NAME",
+        "OPTION_TOOLTIP_SOCIAL_DISCORD_DISPLAY_NAME_OPTION_LAST_ONLINE",
+        "OPTION_TOOLTIP_SOCIAL_ENABLE_DISCORD_FUNCTIONALITY",
+        "SOCIAL_DISCORD_DISCONNECT",
+        "SOCIAL_DISCORD_DISPLAY_NAME",
+        "SOCIAL_DISCORD_DISPLAY_NAME_OPTION_DEFAULT",
+        "SOCIAL_DISCORD_DISPLAY_NAME_OPTION_GLOBAL_NAME",
+        "SOCIAL_DISCORD_DISPLAY_NAME_OPTION_LAST_ONLINE",
+        "SOCIAL_ENABLE_DISCORD_FUNCTIONALITY"
+    ];
+
+    private void ApplyMissingGlobalStringPlaceholders(IWowGlobalStringProvider strings)
+    {
+        var missing = InterfaceGlobalStringTags
+            .Where(tag => !strings.Strings.ContainsKey(tag))
+            .ToArray();
+        if (missing.Length == 0)
+            return;
+
+        foreach (var tag in missing)
+        {
+            lua_pushstring(State, tag);
+            lua_setglobal(State, tag);
+        }
+        Log.Warn(
+            "loader",
+            $"The selected build's GlobalStrings table is missing {missing.Length} tag(s) the " +
+            $"Blizzard interface uses as text; the tag name is shown instead: " +
+            string.Join(", ", missing));
     }
 
     private void LinkStringMetatable() => ExecuteString(

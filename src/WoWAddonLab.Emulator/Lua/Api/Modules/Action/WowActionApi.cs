@@ -84,6 +84,7 @@ internal sealed class WowActionApi : LuaApiModule
     public override void Register(lua_State state)
     {
         LuaBindings.RegisterClosureGlobal(state, "GetActionInfo", Callback);
+        LuaBindings.RegisterClosureGlobal(state, "UseAction", Callback);
         LuaBindings.RegisterClosureGlobal(state, "GetActionBarToggles", Callback);
         LuaBindings.RegisterClosureGlobal(state, "SetActionBarToggles", Callback);
         LuaBindings.RegisterClosureGlobal(state, "GetPetActionInfo", Callback);
@@ -349,6 +350,16 @@ internal sealed class WowActionApi : LuaApiModule
             case "ToggleAutoCastPetAction":
                 RequiredOneBasedIndex(state, 1, $"Usage: C_ActionBar.{operation}(actionID)");
                 return 0;
+            case "UseAction":
+            {
+                var usedSlot = RequiredOneBasedIndex(
+                    state,
+                    1,
+                    "Usage: UseAction(actionID [, unit, button, isKeyPress])");
+                runtime.Actions.LastUsedSlot =
+                    runtime.Actions.Slots.ContainsKey(usedSlot) ? usedSlot : null;
+                return 0;
+            }
         }
 
         var slotId = RequiredOneBasedIndex(state, 1, $"Usage: C_ActionBar.{operation}(actionID)");

@@ -2582,9 +2582,11 @@ internal sealed class XmlUiLoader
         if ((overrides & UiFontOverrides.CanBeUserScaled) == 0)
             target.CanBeUserScaled = source.CanBeUserScaled;
         target.HasLocalJustifyHorizontal =
-            (overrides & UiFontOverrides.JustifyHorizontal) != 0;
+            (overrides & UiFontOverrides.JustifyHorizontal) != 0 ||
+            source.HasLocalJustifyHorizontal;
         target.HasLocalJustifyVertical =
-            (overrides & UiFontOverrides.JustifyVertical) != 0;
+            (overrides & UiFontOverrides.JustifyVertical) != 0 ||
+            source.HasLocalJustifyVertical;
     }
 
     private static string ReplaceFontFlag(string flags, string family, string value)

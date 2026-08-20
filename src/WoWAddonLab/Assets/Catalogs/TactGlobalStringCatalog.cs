@@ -19,7 +19,7 @@ public sealed class TactGlobalStringCatalog : TactCatalog, IWowGlobalStringProvi
         var strings = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var row in database.Load("GlobalStrings", build).Values)
         {
-            if ((Integer(row, "Flags") & 1) == 0)
+            if ((Integer(row, "Flags") & 3) == 0)
                 continue;
             var name = Text(row, "BaseTag");
             if (string.IsNullOrWhiteSpace(name))

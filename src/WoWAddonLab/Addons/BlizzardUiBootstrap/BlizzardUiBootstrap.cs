@@ -42,7 +42,7 @@ public static partial class BlizzardUiBootstrap
         "Blizzard_UnitFrame",
         "Blizzard_WorldMap"
     ];
-    private const int CacheSchemaVersion = 38;
+    private const int CacheSchemaVersion = 41;
     private static readonly IReadOnlyDictionary<string, string[]> ImplicitInGameDependencies =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {

@@ -4,6 +4,8 @@ A standalone World of Warcraft addon runtime for developing and testing installe
 
 Currently in "early" development, not ready for use yet just for messing with!
 
+![mainscreenshot](/screenshots/WoWAddonLab_p0W5v3uyyk.jpeg?raw=true)
+
 ## What works
 
 - Native Lua 5.1.5 through Lua.NET, including WoW compatibility helpers.

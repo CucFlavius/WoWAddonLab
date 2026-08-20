@@ -13577,6 +13577,16 @@ internal static class LuaBindings
         var inherited = source?.Font is { } sourceFont
             ? CopyFont(sourceFont)
             : new UiFontState();
+        if (!inherited.HasLocalJustifyHorizontal)
+        {
+            inherited.JustifyHorizontal = local.JustifyHorizontal;
+            inherited.HasLocalJustifyHorizontal = local.HasLocalJustifyHorizontal;
+        }
+        if (!inherited.HasLocalJustifyVertical)
+        {
+            inherited.JustifyVertical = local.JustifyVertical;
+            inherited.HasLocalJustifyVertical = local.HasLocalJustifyVertical;
+        }
         ApplyLocalFontOverrides(local, inherited);
         inherited.Text = local.Text;
         inherited.LocalOverrides = local.LocalOverrides;
@@ -13622,9 +13632,9 @@ internal static class LuaBindings
             target.NonSpaceWrap = local.NonSpaceWrap;
         if ((overrides & UiFontOverrides.CanBeUserScaled) != 0)
             target.CanBeUserScaled = local.CanBeUserScaled;
-        target.HasLocalJustifyHorizontal =
+        target.HasLocalJustifyHorizontal |=
             (overrides & UiFontOverrides.JustifyHorizontal) != 0;
-        target.HasLocalJustifyVertical =
+        target.HasLocalJustifyVertical |=
             (overrides & UiFontOverrides.JustifyVertical) != 0;
     }
 
@@ -17997,7 +18007,6 @@ internal static class LuaBindings
             value.FontSmoothScaling);
         if (!(lineHeight > 0))
             return new TextMeasurement(Vector2.Zero, 0);
-
         var positiveShadowWidth =
             UiTextLineMetrics.ResolveLogicalPositiveShadowWidth(
                 font.ShadowOffset.X,
