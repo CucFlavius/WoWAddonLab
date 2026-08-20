@@ -11,4 +11,15 @@
           DestinationFiles="$(OutDir)runtimes\win-x64\native\lua515.dll"
           SkipUnchangedFiles="true" />
   </Target>
+
+  <Target Name="PublishWoWLuaRuntime"
+          AfterTargets="Publish"
+          Condition="'$(OS)' == 'Windows_NT' and Exists('$(WoWLuaRuntime)')">
+    <Copy SourceFiles="$(WoWLuaRuntime)"
+          DestinationFiles="$(PublishDir)lua515.dll"
+          Condition="Exists('$(PublishDir)lua515.dll')" />
+    <Copy SourceFiles="$(WoWLuaRuntime)"
+          DestinationFiles="$(PublishDir)runtimes\win-x64\native\lua515.dll"
+          Condition="Exists('$(PublishDir)runtimes\win-x64\native\lua515.dll')" />
+  </Target>
 </Project>

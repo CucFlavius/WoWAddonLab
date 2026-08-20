@@ -1,0 +1,143 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to stamp, for example 0.2.0. Leave empty to derive it from VersionPrefix.
+        required: false
+        type: string
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+
+jobs:
+  windows:
+    name: Release build (win-x64)
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $props = [xml](Get-Content Directory.Build.props -Raw)
+          $prefix = $props.SelectSingleNode('//VersionPrefix').InnerText.Trim()
+          $requested = '${{ inputs.version }}'.Trim()
+          $isRelease = '${{ github.ref }}'.StartsWith('refs/tags/v')
+
+          if ($isRelease) {
+            $version = '${{ github.ref_name }}'.Substring(1)
+          } elseif ($requested) {
+            $version = $requested
+          } else {
+            $version = "$prefix-ci.${{ github.run_number }}"
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            Write-Error "Version '$version' is not a valid semantic version."
+            exit 1
+          }
+
+          $short = '${{ github.sha }}'.Substring(0, 7)
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "informational=$version+$short" >> $env:GITHUB_OUTPUT
+          "package=WoWAddonLab-$version-win-x64" >> $env:GITHUB_OUTPUT
+          "isRelease=$($isRelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          Write-Host "Building version $version"
+
+      - name: Restore
+        run: dotnet restore WoWAddonLab.slnx
+
+      - name: Test
+        run: >
+          dotnet test WoWAddonLab.slnx
+          --configuration Release
+          --no-restore
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:InformationalVersion=${{ steps.version.outputs.informational }}
+
+      - name: Publish
+        run: >
+          dotnet publish src/WoWAddonLab/WoWAddonLab.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishTrimmed=false
+          -p:PublishSingleFile=false
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:InformationalVersion=${{ steps.version.outputs.informational }}
+          --output artifacts/publish/WoWAddonLab
+
+      - name: Verify Lua runtime
+        shell: pwsh
+        run: |
+          $expected = (Get-FileHash native/lua515/win-x64/lua515.dll -Algorithm SHA256).Hash
+          $shipped = Get-ChildItem artifacts/publish/WoWAddonLab -Recurse -Filter lua515.dll
+          if (-not $shipped) {
+            Write-Error 'lua515.dll is missing from the published output.'
+            exit 1
+          }
+          foreach ($file in $shipped) {
+            $actual = (Get-FileHash $file.FullName -Algorithm SHA256).Hash
+            if ($actual -ne $expected) {
+              Write-Error "$($file.FullName) is not the repository Lua 5.1.5 build."
+              exit 1
+            }
+          }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $zip = "artifacts/${{ steps.version.outputs.package }}.zip"
+          Compress-Archive -Path artifacts/publish/WoWAddonLab -DestinationPath $zip -CompressionLevel Optimal
+          Write-Host "Packaged $zip ($([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB)"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.package }}
+          path: artifacts/${{ steps.version.outputs.package }}.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release
+        if: steps.version.outputs.isRelease == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create '${{ github.ref_name }}'
+          "artifacts/${{ steps.version.outputs.package }}.zip"
+          --title '${{ github.ref_name }}'
+          --generate-notes
+          --verify-tag
