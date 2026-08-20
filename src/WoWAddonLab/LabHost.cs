@@ -79,6 +79,7 @@ public sealed class LabHost : IDisposable
     private bool _paused;
     private bool _step;
     private bool _toolsVisible = true;
+    private bool _toolbarVisible = true;
     private bool _viewportHovered;
     private bool _fontAtlasCanMutate;
     private bool _viewportFocused = true;
@@ -88,8 +89,18 @@ public sealed class LabHost : IDisposable
     private Vector2 _workspaceSize;
     private float _addonPanelWidth;
     private float _toolPanelWidth;
-    private float _workspaceGap;
+    private float _toolbarHeight;
+    private IconSheet? _icons;
+
+    private const float SplitterGrabWidth = 8;
+    private const float ToolbarIconScale = 1.15f;
+    private const float ToolbarIconPaddingScale = 0.3f;
+    private const float ToolbarEdgePaddingScale = 0.18f;
+    private const float ToolbarDisabledAlpha = 0.5f;
+    private const float ToolbarActiveBrighten = 1.35f;
     private bool _splitterDirty;
+    private bool _splitterDragging;
+    private bool _splitterHot;
     private Vector2 _canvasOrigin;
     private Vector2 _canvasSize;
     private float _canvasScale = 1;
@@ -166,6 +177,7 @@ public sealed class LabHost : IDisposable
         _windowInitSpan = null;
         using var loadSpan = StartupTimeline.Begin("window load callback");
 
+        DarkTitleBar.Apply(_window.Native?.Win32?.Hwnd ?? 0);
         using (StartupTimeline.Begin("create OpenGL context"))
             _gl = _window.CreateOpenGL();
         using (StartupTimeline.Begin("create input context"))
@@ -176,6 +188,8 @@ public sealed class LabHost : IDisposable
         io.ConfigWindowsMoveFromTitleBarOnly = true;
         using (StartupTimeline.Begin("configure ImGui style"))
             ConfigureStyle();
+        using (StartupTimeline.Begin("load toolbar icon sheet"))
+            _icons = new IconSheet(_gl);
 
         using (var span = StartupTimeline.Begin("detect WoW installations"))
         {
@@ -282,8 +296,9 @@ public sealed class LabHost : IDisposable
         ServicePendingReload();
 
         RenderMainMenu();
+        RenderToolbar();
         UpdateWorkspaceLayout();
-        RenderWorkspaceSplitter();
+        UpdateSplitterInteraction();
         RenderAddonViewport();
         RenderToolWorkspace();
 
@@ -322,7 +337,10 @@ public sealed class LabHost : IDisposable
 
     private void RenderMainMenu()
     {
-        if (!ImGui.BeginMainMenuBar())
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
+        var menuBarOpen = ImGui.BeginMainMenuBar();
+        ImGui.PopStyleVar();
+        if (!menuBarOpen)
             return;
         if (ImGui.BeginMenu("Emulator"))
         {
@@ -340,6 +358,8 @@ public sealed class LabHost : IDisposable
         }
         if (ImGui.BeginMenu("View"))
         {
+            if (ImGui.MenuItem("Toolbar", null, _toolbarVisible))
+                _toolbarVisible = !_toolbarVisible;
             if (ImGui.MenuItem("Tool workspace", "F1", _toolsVisible))
                 _toolsVisible = !_toolsVisible;
             ImGui.EndMenu();
@@ -359,12 +379,83 @@ public sealed class LabHost : IDisposable
         ImGui.EndMainMenuBar();
     }
 
+    private void RenderToolbar()
+    {
+        if (!_toolbarVisible)
+        {
+            _toolbarHeight = 0;
+            return;
+        }
+
+        var viewport = ImGui.GetMainViewport();
+        var style = ImGui.GetStyle();
+        var iconSize = MathF.Round(ImGui.GetFontSize() * ToolbarIconScale);
+        var iconPadding = MathF.Round(iconSize * ToolbarIconPaddingScale);
+        var edgePadding = MathF.Round(iconSize * ToolbarEdgePaddingScale);
+        _toolbarHeight = iconSize + iconPadding * 2 + edgePadding * 2;
+        ImGui.SetNextWindowPos(viewport.WorkPos);
+        ImGui.SetNextWindowSize(new Vector2(viewport.WorkSize.X, _toolbarHeight));
+        var flags =
+            ImGuiWindowFlags.NoDecoration |
+            ImGuiWindowFlags.NoMove |
+            ImGuiWindowFlags.NoSavedSettings |
+            ImGuiWindowFlags.NoBringToFrontOnFocus |
+            ImGuiWindowFlags.NoNavFocus |
+            ImGuiWindowFlags.NoScrollWithMouse;
+        ImGui.PushStyleVar(
+            ImGuiStyleVar.WindowPadding,
+            new Vector2(edgePadding * 2, edgePadding));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, Vector2.Zero);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, style.Colors[(int)ImGuiCol.MenuBarBg]);
+        ImGui.Begin("##toolbar", flags);
+        ImGui.PopStyleColor();
+        ImGui.PopStyleVar(4);
+
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(iconPadding, iconPadding));
+        ImGui.PushStyleVar(ImGuiStyleVar.DisabledAlpha, ToolbarDisabledAlpha);
+        var menuHovered = style.Colors[(int)ImGuiCol.HeaderHovered];
+        ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, menuHovered);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Brighten(menuHovered, ToolbarActiveBrighten));
+        if (ToolbarButton(IconSheetIcon.Reload, "Reload UI", "Ctrl+R", SessionBusy || _reloadRequested))
+            Reload();
+        ImGui.PopStyleColor(3);
+        ImGui.PopStyleVar(2);
+
+        ImGui.End();
+    }
+
+    private bool ToolbarButton(
+        IconSheetIcon icon,
+        string label,
+        string? shortcut,
+        bool disabled)
+    {
+        var iconSize = MathF.Round(ImGui.GetFontSize() * ToolbarIconScale);
+        ImGui.BeginDisabled(disabled);
+        var pressed = _icons is null
+            ? ImGui.Button(label, new Vector2(iconSize, iconSize))
+            : ImGui.ImageButton(
+                $"##toolbar-{icon}",
+                _icons.TextureId,
+                new Vector2(iconSize, iconSize),
+                IconSheet.Uv0(icon),
+                IconSheet.Uv1(icon),
+                Vector4.Zero,
+                Vector4.One);
+        ImGui.EndDisabled();
+        if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+            ImGui.SetTooltip(shortcut is null ? label : $"{label}   {shortcut}");
+        return pressed;
+    }
+
     private void UpdateWorkspaceLayout()
     {
         var viewport = ImGui.GetMainViewport();
-        _workspaceOrigin = viewport.WorkPos;
-        _workspaceSize = viewport.WorkSize;
-        _workspaceGap = _toolsVisible ? 8 : 0;
+        _workspaceOrigin = viewport.WorkPos + new Vector2(0, _toolbarHeight);
+        _workspaceSize = viewport.WorkSize - new Vector2(0, _toolbarHeight);
         if (!_toolsVisible)
         {
             _toolPanelWidth = 0;
@@ -372,48 +463,61 @@ public sealed class LabHost : IDisposable
             return;
         }
 
-        var minimumViewportWidth = MathF.Min(480, _workspaceSize.X * 0.55f);
-        var maximumToolWidth = MathF.Max(240, _workspaceSize.X - minimumViewportWidth - _workspaceGap);
-        _toolPanelWidth = Math.Clamp(_settings.ToolPanelWidth, 240, maximumToolWidth);
-        _addonPanelWidth = MathF.Max(0, _workspaceSize.X - _toolPanelWidth - _workspaceGap);
+        _toolPanelWidth = Math.Clamp(
+            _settings.ToolPanelWidth,
+            240,
+            MaximumToolPanelWidth());
+        _addonPanelWidth = MathF.Max(0, _workspaceSize.X - _toolPanelWidth);
     }
 
-    private void RenderWorkspaceSplitter()
+    private static Vector4 Brighten(Vector4 color, float factor) =>
+        new(
+            MathF.Min(color.X * factor, 1),
+            MathF.Min(color.Y * factor, 1),
+            MathF.Min(color.Z * factor, 1),
+            color.W);
+
+    private float MaximumToolPanelWidth() =>
+        MathF.Max(240, _workspaceSize.X - MathF.Min(480, _workspaceSize.X * 0.55f));
+
+    private void UpdateSplitterInteraction()
     {
+        _splitterHot = false;
         if (!_toolsVisible)
+        {
+            _splitterDragging = false;
+            return;
+        }
+
+        var mouse = ImGui.GetMousePos();
+        var bandStart = _workspaceOrigin.X + _addonPanelWidth - SplitterGrabWidth / 2;
+        var hovered =
+            mouse.X >= bandStart &&
+            mouse.X < bandStart + SplitterGrabWidth &&
+            mouse.Y >= _workspaceOrigin.Y &&
+            mouse.Y < _workspaceOrigin.Y + _workspaceSize.Y;
+
+        if (hovered && !_splitterDragging && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+            _splitterDragging = true;
+        if (_splitterDragging && ImGui.IsMouseReleased(ImGuiMouseButton.Left))
+        {
+            _splitterDragging = false;
+            if (_splitterDirty)
+            {
+                _splitterDirty = false;
+                PersistSettings();
+            }
+        }
+
+        _splitterHot = hovered || _splitterDragging;
+        if (_splitterHot)
+            ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEW);
+        if (!_splitterDragging)
             return;
 
-        var position = _workspaceOrigin + new Vector2(_addonPanelWidth, 0);
-        ImGui.SetNextWindowPos(position);
-        ImGui.SetNextWindowSize(new Vector2(_workspaceGap, _workspaceSize.Y));
-        var flags =
-            ImGuiWindowFlags.NoDecoration |
-            ImGuiWindowFlags.NoMove |
-            ImGuiWindowFlags.NoSavedSettings |
-            ImGuiWindowFlags.NoBackground |
-            ImGuiWindowFlags.NoBringToFrontOnFocus |
-            ImGuiWindowFlags.NoNav;
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
-        ImGui.Begin("##workspace-splitter", flags);
-        ImGui.PopStyleVar();
-        ImGui.InvisibleButton("##horizontal-resize", new Vector2(_workspaceGap, _workspaceSize.Y));
-        if (ImGui.IsItemHovered() || ImGui.IsItemActive())
-            ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeEW);
-        if (ImGui.IsItemActive())
-        {
-            var mouse = ImGui.GetMousePos();
-            var requested = _workspaceOrigin.X + _workspaceSize.X - mouse.X;
-            var minimumViewportWidth = MathF.Min(480, _workspaceSize.X * 0.55f);
-            var maximum = MathF.Max(240, _workspaceSize.X - minimumViewportWidth - _workspaceGap);
-            _settings.ToolPanelWidth = Math.Clamp(requested, 240, maximum);
-            _splitterDirty = true;
-        }
-        if (_splitterDirty && ImGui.IsMouseReleased(ImGuiMouseButton.Left))
-        {
-            _splitterDirty = false;
-            PersistSettings();
-        }
-        ImGui.End();
+        var requested = _workspaceOrigin.X + _workspaceSize.X - mouse.X;
+        _settings.ToolPanelWidth = Math.Clamp(requested, 240, MaximumToolPanelWidth());
+        _splitterDirty = true;
     }
 
     private void RenderAddonViewport()
@@ -421,6 +525,7 @@ public sealed class LabHost : IDisposable
         ImGui.SetNextWindowPos(_workspaceOrigin);
         ImGui.SetNextWindowSize(new Vector2(_addonPanelWidth, _workspaceSize.Y));
         var flags =
+            ImGuiWindowFlags.NoTitleBar |
             ImGuiWindowFlags.NoMove |
             ImGuiWindowFlags.NoResize |
             ImGuiWindowFlags.NoCollapse |
@@ -429,8 +534,9 @@ public sealed class LabHost : IDisposable
             ImGuiWindowFlags.NoScrollWithMouse;
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
         var viewportOpen = ImGui.Begin("Addon Viewport", flags);
-        ImGui.PopStyleVar(2);
+        ImGui.PopStyleVar(3);
         if (!viewportOpen)
         {
             ImGui.End();
@@ -460,7 +566,7 @@ public sealed class LabHost : IDisposable
         RenderViewportGrid(drawList, _canvasOrigin, _canvasSize, scale);
         if (_loadingStatus is null)
         {
-            RouteCanvasInput(ImGui.IsWindowHovered());
+            RouteCanvasInput(ImGui.IsWindowHovered() && !_splitterHot);
         }
         else
         {
@@ -487,9 +593,9 @@ public sealed class LabHost : IDisposable
         Vector2 size,
         float scale)
     {
-        const uint backgroundColor = 0xFF171719;
-        const uint lineColor = 0xFF000000;
-        const float logicalCellSize = 32;
+        const uint backgroundColor = 0xFF212121;
+        const uint lineColor = 0xFF181818;
+        const float logicalCellSize = 64;
         var end = origin + size;
         drawList.AddRectFilled(origin, end, backgroundColor);
 
@@ -523,7 +629,7 @@ public sealed class LabHost : IDisposable
             return;
         }
 
-        ImGui.SetNextWindowPos(_workspaceOrigin + new Vector2(_addonPanelWidth + _workspaceGap, 0));
+        ImGui.SetNextWindowPos(_workspaceOrigin + new Vector2(_addonPanelWidth, 0));
         ImGui.SetNextWindowSize(new Vector2(_toolPanelWidth, _workspaceSize.Y));
         var flags =
             ImGuiWindowFlags.NoMove |
@@ -2734,6 +2840,8 @@ public sealed class LabHost : IDisposable
         _addonFonts = null;
         _textures?.Dispose();
         _textures = null;
+        _icons?.Dispose();
+        _icons = null;
         _imgui?.Dispose();
         _imgui = null;
         _input?.Dispose();

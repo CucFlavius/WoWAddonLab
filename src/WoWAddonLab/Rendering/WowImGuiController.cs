@@ -91,6 +91,8 @@ public sealed class WowImGuiController : IDisposable
         _frameBegun = true;
     }
 
+    private ImGuiMouseCursor _appliedCursor = ImGuiMouseCursor.Arrow;
+
     public nint Context { get; }
 
     public static nint TextureId(
@@ -236,8 +238,40 @@ public sealed class WowImGuiController : IDisposable
             ImGui.Render();
         SetPerFrameData(deltaSeconds);
         UpdateInput();
+        UpdateMouseCursor();
         ImGui.NewFrame();
         _frameBegun = true;
+    }
+
+    private void UpdateMouseCursor()
+    {
+        var requested = ImGui.GetMouseCursor();
+        if (requested == _appliedCursor)
+            return;
+        _appliedCursor = requested;
+        if (_input.Mice.Count == 0)
+            return;
+
+        var cursor = _input.Mice[0].Cursor;
+        if (requested == ImGuiMouseCursor.None)
+        {
+            cursor.CursorMode = CursorMode.Hidden;
+            return;
+        }
+
+        cursor.CursorMode = CursorMode.Normal;
+        cursor.StandardCursor = requested switch
+        {
+            ImGuiMouseCursor.TextInput => StandardCursor.IBeam,
+            ImGuiMouseCursor.ResizeNS => StandardCursor.VResize,
+            ImGuiMouseCursor.ResizeEW => StandardCursor.HResize,
+            ImGuiMouseCursor.ResizeNESW => StandardCursor.NeswResize,
+            ImGuiMouseCursor.ResizeNWSE => StandardCursor.NwseResize,
+            ImGuiMouseCursor.ResizeAll => StandardCursor.ResizeAll,
+            ImGuiMouseCursor.NotAllowed => StandardCursor.NotAllowed,
+            ImGuiMouseCursor.Hand => StandardCursor.Hand,
+            _ => StandardCursor.Arrow
+        };
     }
 
     public void Render()
