@@ -81,6 +81,42 @@ public sealed class LocalAddonAssetSourceTests
         }
     }
 
+    [Fact]
+    public void EarlierRootWinsForSharedRelativePath()
+    {
+        using var first = new TestAddonFiles("FirstAddon");
+        using var second = new TestAddonFiles("SecondAddon");
+        first.Write("assets\\icon.blp", [1]);
+        second.Write("assets\\icon.blp", [2]);
+        var assets = new LocalAddonAssetSource([first.Root, second.Root]);
+
+        Assert.Equal([1], assets.Read("assets\\icon", defaultToBlp: true));
+    }
+
+    [Fact]
+    public void AddonPrefixedPathResolvesAgainstItsOwnRoot()
+    {
+        using var first = new TestAddonFiles("FirstAddon");
+        using var second = new TestAddonFiles("SecondAddon");
+        first.Write("assets\\icon.blp", [1]);
+        second.Write("assets\\icon.blp", [2]);
+        var assets = new LocalAddonAssetSource([first.Root, second.Root]);
+
+        Assert.Equal(
+            [2],
+            assets.Read("Interface\\AddOns\\SecondAddon\\assets\\icon", defaultToBlp: true));
+    }
+
+    [Fact]
+    public void UnknownAddonNameDoesNotFallBackToOtherRoots()
+    {
+        using var files = new TestAddonFiles("FirstAddon");
+        files.Write("assets\\icon.blp", [1]);
+        var assets = new LocalAddonAssetSource([files.Root]);
+
+        Assert.Null(assets.Read("Interface\\AddOns\\Missing\\assets\\icon", defaultToBlp: true));
+    }
+
     [Theory]
     [InlineData("Interface/AddOns/Test/assets/icon", "Interface/AddOns/Test/assets/icon.blp")]
     [InlineData("Interface/AddOns/Test/assets/icon.tga", "Interface/AddOns/Test/assets/icon.blp")]
@@ -90,12 +126,12 @@ public sealed class LocalAddonAssetSourceTests
 
     private sealed class TestAddonFiles : IDisposable
     {
-        public TestAddonFiles()
+        public TestAddonFiles(string name = "AllTheThings")
         {
             var parent = Path.Combine(
                 Path.GetTempPath(),
                 $"wow-addon-lab-assets-{Guid.NewGuid():N}");
-            Root = Path.Combine(parent, "AllTheThings");
+            Root = Path.Combine(parent, name);
             Directory.CreateDirectory(Root);
         }
 

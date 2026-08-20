@@ -3,8 +3,17 @@ namespace WoWAddonLab.Assets;
 internal sealed class LocalAddonAssetSource
 {
     private const string AddonPrefix = "Interface\\AddOns\\";
+
+    private static readonly EnumerationOptions FileEnumeration = new()
+    {
+        RecurseSubdirectories = true,
+        IgnoreInaccessible = true,
+        AttributesToSkip = FileAttributes.None,
+        MaxRecursionDepth = 32
+    };
+
     private readonly string[] _roots;
-    private readonly IReadOnlyDictionary<string, string> _namedRoots;
+    private readonly Lazy<AssetIndex> _index;
 
     public LocalAddonAssetSource(IEnumerable<string> addonRoots)
     {
@@ -12,19 +21,18 @@ internal sealed class LocalAddonAssetSource
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        _namedRoots = _roots
-            .GroupBy(
-                path => Path.GetFileName(path.TrimEnd(
-                    Path.DirectorySeparatorChar,
-                    Path.AltDirectorySeparatorChar)),
-                StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.Last(),
-                StringComparer.OrdinalIgnoreCase);
+        _index = new Lazy<AssetIndex>(
+            BuildIndex,
+            LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public byte[]? Read(string? asset, bool defaultToBlp = false)
+    {
+        var path = ResolvePath(asset, defaultToBlp);
+        return path is null ? null : File.ReadAllBytes(path);
+    }
+
+    internal string? ResolvePath(string? asset, bool defaultToBlp = false)
     {
         if (string.IsNullOrWhiteSpace(asset))
             return null;
@@ -33,18 +41,9 @@ internal sealed class LocalAddonAssetSource
         {
             var path = ResolveExactPath(candidate);
             if (path is not null)
-                return File.ReadAllBytes(path);
+                return path;
         }
         return null;
-    }
-
-    internal string? ResolvePath(string? asset, bool defaultToBlp = false)
-    {
-        if (string.IsNullOrWhiteSpace(asset))
-            return null;
-        return Candidates(asset, defaultToBlp)
-            .Select(ResolveExactPath)
-            .FirstOrDefault(path => path is not null);
     }
 
     private static IEnumerable<string> Candidates(string asset, bool defaultToBlp)
@@ -68,38 +67,52 @@ internal sealed class LocalAddonAssetSource
             return File.Exists(asset) ? Path.GetFullPath(asset) : null;
 
         var normalized = asset.Replace('/', '\\').TrimStart('\\');
+        var index = _index.Value;
         if (normalized.StartsWith(AddonPrefix, StringComparison.OrdinalIgnoreCase))
         {
             var relative = normalized[AddonPrefix.Length..];
             var separator = relative.IndexOf('\\');
             if (separator < 0 ||
-                !_namedRoots.TryGetValue(relative[..separator], out var root))
+                !index.NamedRoots.TryGetValue(relative[..separator], out var addonFiles))
             {
                 return null;
             }
 
-            return ExistingSafePath(root, relative[(separator + 1)..]);
+            return addonFiles.GetValueOrDefault(relative[(separator + 1)..]);
         }
 
+        return index.Files.GetValueOrDefault(normalized);
+    }
+
+    private AssetIndex BuildIndex()
+    {
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var namedRoots = new Dictionary<string, Dictionary<string, string>>(
+            StringComparer.OrdinalIgnoreCase);
         foreach (var root in _roots)
         {
-            var path = ExistingSafePath(root, normalized);
-            if (path is not null)
-                return path;
+            var rootFiles = IndexRoot(root);
+            foreach (var file in rootFiles)
+                files.TryAdd(file.Key, file.Value);
+            namedRoots[Path.GetFileName(root.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar))] = rootFiles;
         }
-        return null;
+        return new AssetIndex(files, namedRoots);
     }
 
-    private static string? ExistingSafePath(string root, string relative)
+    private static Dictionary<string, string> IndexRoot(string root)
     {
-        var path = Path.GetFullPath(Path.Combine(root, relative));
-        var fromRoot = Path.GetRelativePath(root, path);
-        if (fromRoot.Equals("..", StringComparison.Ordinal) ||
-            fromRoot.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
-            Path.IsPathRooted(fromRoot))
-        {
-            return null;
-        }
-        return File.Exists(path) ? path : null;
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!Directory.Exists(root))
+            return files;
+
+        foreach (var path in Directory.EnumerateFiles(root, "*", FileEnumeration))
+            files.TryAdd(Path.GetRelativePath(root, path).Replace('/', '\\'), path);
+        return files;
     }
+
+    private sealed record AssetIndex(
+        Dictionary<string, string> Files,
+        Dictionary<string, Dictionary<string, string>> NamedRoots);
 }
