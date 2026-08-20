@@ -98,6 +98,9 @@ public sealed class LabHost : IDisposable
     private bool _inspectorSelectionMode;
     private bool _inspectorRevealSelection;
     private string _addonFilter = string.Empty;
+    private string _blizzardModuleFilter = string.Empty;
+    private BlizzardUiBootstrapResult? _blizzardStartupSource;
+    private HashSet<string> _blizzardStartupModules = new(StringComparer.OrdinalIgnoreCase);
     private string _profileMessage = string.Empty;
     private string _inspectorFilter = string.Empty;
     private string _luaInput = "DM and DM.Game and DM.Game.depth";
@@ -923,12 +926,16 @@ public sealed class LabHost : IDisposable
                 ImGui.TextDisabled("Preparing Blizzard UI from the selected game build...");
             else if (_blizzardUi is not null)
                 ImGui.TextDisabled(
-                    $"{_blizzardUi.ModuleNames.Count} startup modules · {_blizzardUi.ExtractedFiles} cached files" +
+                    $"{_blizzardUi.ModuleNames.Count} modules · {_blizzardUi.ExtractedFiles} cached files" +
                     (_blizzardUi.CacheHit ? " · reused" : " · refreshed"));
             else if (!_options.AutoConnectTact)
                 ImGui.TextDisabled("TACTSharp is disabled; Blizzard UI cannot be loaded.");
         }
 
+        if (loadBlizzardUi && _blizzardUi is { ModuleNames.Count: > 0 })
+            RenderBlizzardUiModules(productSettings);
+
+        ImGui.SeparatorText("Installed addons");
         ImGui.SetNextItemWidth(-1);
         ImGui.InputTextWithHint("##addon-filter", "Filter installed addons...", ref _addonFilter, 256);
 
@@ -1002,6 +1009,74 @@ public sealed class LabHost : IDisposable
         ImGui.TextDisabled(
             $"{productSettings.EnabledAddons.Count} selected · {_loadedAddons.Count} loaded including dependencies");
 
+        RenderSavedVariablesProfile();
+    }
+
+    private void RenderBlizzardUiModules(ProductEmulationSettings productSettings)
+    {
+        var modules = _blizzardUi!.ModuleNames;
+        var disabled = productSettings.DisabledBlizzardModules;
+        var startup = BlizzardStartupModuleNames();
+
+        ImGui.SeparatorText("Blizzard UI modules");
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint(
+            "##blizzard-module-filter",
+            "Filter Blizzard UI modules...",
+            ref _blizzardModuleFilter,
+            256);
+
+        if (ImGui.Button("All on##blizzard-modules"))
+        {
+            disabled.Clear();
+            PersistSettings();
+        }
+        ImGui.SameLine();
+        if (ImGui.Button("All off##blizzard-modules"))
+        {
+            foreach (var module in modules)
+                disabled.Add(module);
+            PersistSettings();
+        }
+
+        var filtered = modules
+            .Where(value =>
+                string.IsNullOrWhiteSpace(_blizzardModuleFilter) ||
+                value.Contains(_blizzardModuleFilter, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var listHeight = Math.Clamp(ImGui.GetContentRegionAvail().Y * 0.3f, 140, 300);
+        if (ImGui.BeginChild("blizzard-modules", new Vector2(0, listHeight), ImGuiChildFlags.Border))
+        {
+            foreach (var module in filtered)
+            {
+                var enabled = !disabled.Contains(module);
+                if (ImGui.Checkbox($"##blizzard-{module}", ref enabled))
+                {
+                    if (enabled)
+                        disabled.Remove(module);
+                    else
+                        disabled.Add(module);
+                    PersistSettings();
+                }
+                ImGui.SameLine();
+                ImGui.TextUnformatted(module);
+                if (!startup.Contains(module))
+                {
+                    ImGui.SameLine();
+                    ImGui.TextDisabled("load on demand");
+                }
+            }
+        }
+        ImGui.EndChild();
+
+        var enabledCount = modules.Count(value => !disabled.Contains(value));
+        var startupCount = startup.Count(value => !disabled.Contains(value));
+        ImGui.TextDisabled(
+            $"{enabledCount} of {modules.Count} enabled · {startupCount} at startup");
+    }
+
+    private void RenderSavedVariablesProfile()
+    {
         ImGui.SeparatorText("Saved variables profile");
         _selectedProfile = Math.Clamp(_selectedProfile, 0, Math.Max(0, _savedVariableProfiles.Count - 1));
         var profile = _savedVariableProfiles[_selectedProfile];
@@ -1928,11 +2003,12 @@ public sealed class LabHost : IDisposable
         using (StartupTimeline.Begin("resolve enabled addon paths"))
             paths = ResolveEnabledAddonPaths();
         var bootstrapPaths = ShouldLoadBlizzardUi()
-            ? LimitBlizzardUiModules(_blizzardUi?.AddonPaths ?? [])
+            ? LimitBlizzardUiModules(
+                EnabledBlizzardUiModules(_blizzardUi?.AddonPaths ?? []))
             : [];
         var availablePaths = ShouldLoadBlizzardUi()
             ? _options.BlizzardUiModuleLimit is null
-                ? _blizzardUi?.AvailableAddonPaths ?? []
+                ? EnabledBlizzardUiModules(_blizzardUi?.AvailableAddonPaths ?? [])
                 : bootstrapPaths
             : [];
         return new ReloadPlan(
@@ -2093,6 +2169,26 @@ public sealed class LabHost : IDisposable
         _options.BlizzardUiModuleLimit is { } limit
             ? paths.Take(limit).ToArray()
             : paths;
+
+    private IReadOnlyList<string> EnabledBlizzardUiModules(IReadOnlyList<string> paths)
+    {
+        var disabled = CurrentProductSettings().DisabledBlizzardModules;
+        return disabled.Count == 0
+            ? paths
+            : paths.Where(path => !disabled.Contains(Path.GetFileName(path)!)).ToArray();
+    }
+
+    private HashSet<string> BlizzardStartupModuleNames()
+    {
+        if (!ReferenceEquals(_blizzardStartupSource, _blizzardUi))
+        {
+            _blizzardStartupSource = _blizzardUi;
+            _blizzardStartupModules = (_blizzardUi?.AddonPaths ?? [])
+                .Select(path => Path.GetFileName(path)!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+        return _blizzardStartupModules;
+    }
 
     private IReadOnlyList<string> ResolveEnabledAddonPaths()
     {

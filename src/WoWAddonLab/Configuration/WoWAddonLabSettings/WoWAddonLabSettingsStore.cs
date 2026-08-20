@@ -34,6 +34,9 @@ public sealed class WoWAddonLabSettingsStore
                 value.EnabledAddons = new HashSet<string>(
                     value.EnabledAddons ?? [],
                     StringComparer.OrdinalIgnoreCase);
+                value.DisabledBlizzardModules = new HashSet<string>(
+                    value.DisabledBlizzardModules ?? [],
+                    StringComparer.OrdinalIgnoreCase);
                 normalized[key] = value;
             }
             deserialized.Products = normalized;

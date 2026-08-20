@@ -34,6 +34,8 @@ if (options.Headless)
     var blizzardRuntimeFiles = new List<string>();
     WowInstallation? selectedInstallation = null;
     var loadBlizzardUi = options.LoadBlizzardUi ?? true;
+    IReadOnlySet<string> disabledBlizzardModules =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     string savedVariablesDirectory;
     if (options.AddonPath is not null)
     {
@@ -83,6 +85,7 @@ if (options.Headless)
                 settings.Products[productKey] = productSettings;
             }
             loadBlizzardUi = options.LoadBlizzardUi ?? productSettings.LoadBlizzardUi;
+            disabledBlizzardModules = productSettings.DisabledBlizzardModules;
             StartupTimeline.Fact("Product", $"{installation.Product.ProductCode} ({installation.Version})");
             IReadOnlyList<InstalledAddon> catalog;
             using (var span = StartupTimeline.Begin("discover installed addons"))
@@ -280,11 +283,15 @@ if (options.Headless)
             StartupTimeline.Fact("Blizzard UI cache", prepared.CacheHit ? "hit" : "miss (extracted)");
             StartupTimeline.Fact("Blizzard UI files", prepared.ExtractedFiles.ToString());
         }
+        var enabledStartupPaths = prepared.AddonPaths
+            .Where(path => !disabledBlizzardModules.Contains(Path.GetFileName(path)!))
+            .ToArray();
         blizzardUiPaths.AddRange(options.BlizzardUiModuleLimit is { } moduleLimit
-            ? prepared.AddonPaths.Take(moduleLimit)
-            : prepared.AddonPaths);
+            ? enabledStartupPaths.Take(moduleLimit)
+            : enabledStartupPaths);
         blizzardAvailablePaths.AddRange(options.BlizzardUiModuleLimit is null
             ? prepared.AvailableAddonPaths
+                .Where(path => !disabledBlizzardModules.Contains(Path.GetFileName(path)!))
             : blizzardUiPaths);
         blizzardRuntimeFiles.AddRange(prepared.RuntimeFiles);
         Console.WriteLine(
