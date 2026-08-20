@@ -351,6 +351,8 @@ public sealed class LabHost : IDisposable
         ImGui.TextDisabled($"{_session!.Ui.Objects.Count:n0} regions");
         ImGui.Separator();
         ImGui.TextDisabled($"API 127.0.0.1:{_options.Port}");
+        ImGui.Separator();
+        ImGui.TextDisabled($"{ImGui.GetIO().Framerate:n0} FPS");
         ImGui.EndMainMenuBar();
     }
 
