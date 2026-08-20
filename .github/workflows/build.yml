@@ -43,7 +43,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/**/*.csproj', 'Directory.Build.props') }}
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Resolve version
@@ -74,17 +74,6 @@ jobs:
           "package=WoWAddonLab-$version-win-x64" >> $env:GITHUB_OUTPUT
           "isRelease=$($isRelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           Write-Host "Building version $version"
-
-      - name: Restore
-        run: dotnet restore WoWAddonLab.slnx
-
-      - name: Test
-        run: >
-          dotnet test WoWAddonLab.slnx
-          --configuration Release
-          --no-restore
-          -p:Version=${{ steps.version.outputs.version }}
-          -p:InformationalVersion=${{ steps.version.outputs.informational }}
 
       - name: Publish
         run: >

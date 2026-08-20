@@ -20,7 +20,7 @@ docs/
 imgui.ini
 
 # Downloaded and derived caches.
-cache/
+/cache/
 
 # Scratch space for probes and one-off harnesses
 .tmp/
