@@ -92,7 +92,28 @@ public sealed class LabHost : IDisposable
     private float _toolbarHeight;
     private IconSheet? _icons;
 
+    private ViewportControlMode _viewportMode = ViewportControlMode.Interact;
+    private bool _canvasFit = true;
+    private float _canvasManualScale = 1;
+    private Vector2 _canvasPan;
+    private Vector2 _canvasZoomAnchor;
+    private Vector2D<int> _customDisplaySize;
+    private int _canvasDragButton = -1;
+    private bool _canvasDragIsZoom;
+    private Vector2 _canvasPanVelocity;
+
     private const float SplitterGrabWidth = 8;
+    private const float ToolbarGroupGapScale = 0.75f;
+    private const float CanvasMinimumScale = 0.05f;
+    private const float CanvasMaximumScale = 16;
+    private const float CanvasScrollZoomStep = 1.15f;
+    private const float CanvasDragZoomStep = 0.005f;
+    private const float CanvasMinimumVisibleFraction = 0.1f;
+    private const float CanvasPanRubberBand = 0.3f;
+    private const float CanvasPanSettleRate = 14f;
+    private const float CanvasPanInertiaDamping = 6f;
+    private const float CanvasPanMinimumVelocity = 24f;
+    private const float CanvasPanSettleEpsilon = 0.5f;
     private const float ToolbarIconScale = 1.15f;
     private const float ToolbarIconPaddingScale = 0.3f;
     private const float ToolbarEdgePaddingScale = 0.18f;
@@ -205,6 +226,7 @@ public sealed class LabHost : IDisposable
                 _options.LogicalHeight,
                 luaCacheDirectory: WoWAddonLabPaths.LuaCacheDirectory);
         _session.LoadProgress += OnAddonLoadProgress;
+        ApplyStoredSimulatedDisplay();
         if (_input.Keyboards.FirstOrDefault() is { } primaryKeyboard)
         {
             _session.ClipboardReader = () => primaryKeyboard.ClipboardText;
@@ -362,6 +384,8 @@ public sealed class LabHost : IDisposable
                 _toolbarVisible = !_toolbarVisible;
             if (ImGui.MenuItem("Tool workspace", "F1", _toolsVisible))
                 _toolsVisible = !_toolsVisible;
+            ImGui.Separator();
+            RenderSimulatedDisplayMenu();
             ImGui.EndMenu();
         }
 
@@ -419,12 +443,116 @@ public sealed class LabHost : IDisposable
         ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
         ImGui.PushStyleColor(ImGuiCol.ButtonHovered, menuHovered);
         ImGui.PushStyleColor(ImGuiCol.ButtonActive, Brighten(menuHovered, ToolbarActiveBrighten));
+
         if (ToolbarButton(IconSheetIcon.Reload, "Reload UI", "Ctrl+R", SessionBusy || _reloadRequested))
             Reload();
+
+        ToolbarGroupGap(iconSize);
+        if (ToolbarModeButton(IconSheetIcon.Interact, "Interact", ViewportControlMode.Interact))
+            _viewportMode = ViewportControlMode.Interact;
+        ImGui.SameLine();
+        if (ToolbarModeButton(IconSheetIcon.Pan, "Pan", ViewportControlMode.Pan))
+            _viewportMode = ViewportControlMode.Pan;
+        ImGui.SameLine();
+        if (ToolbarModeButton(IconSheetIcon.Zoom, "Zoom", ViewportControlMode.Zoom))
+            _viewportMode = ViewportControlMode.Zoom;
+
+        ToolbarGroupGap(iconSize);
+        if (ToolbarButton(IconSheetIcon.FitToViewport, "Fit to viewport", null, false))
+            FitCanvas();
+        ImGui.SameLine();
+        if (ToolbarButton(IconSheetIcon.ActualSize, "Actual size", null, false))
+            SetCanvasActualSize();
+
         ImGui.PopStyleColor(3);
         ImGui.PopStyleVar(2);
 
         ImGui.End();
+    }
+
+    private void RenderSimulatedDisplayMenu()
+    {
+        if (_session is null || !ImGui.BeginMenu("Simulated display"))
+            return;
+
+        var width = (int)MathF.Round(_session.Ui.PhysicalWidth);
+        var height = (int)MathF.Round(_session.Ui.PhysicalHeight);
+        string? group = null;
+        foreach (var preset in SimulatedDisplayPreset.All)
+        {
+            if (preset.Group != group)
+            {
+                if (group is not null)
+                    ImGui.Separator();
+                group = preset.Group;
+            }
+            var selected = preset.Width == width && preset.Height == height;
+            if (ImGui.MenuItem(preset.Label, null, selected) && !selected)
+                ApplySimulatedDisplay(preset.Width, preset.Height);
+        }
+
+        ImGui.Separator();
+        if (_customDisplaySize.X == 0)
+            _customDisplaySize = new Vector2D<int>(width, height);
+        var custom = new[] { _customDisplaySize.X, _customDisplaySize.Y };
+        ImGui.SetNextItemWidth(ImGui.GetFontSize() * 8);
+        if (ImGui.InputInt2("##custom-display", ref custom[0]))
+            _customDisplaySize = new Vector2D<int>(custom[0], custom[1]);
+        ImGui.SameLine();
+        if (ImGui.Button("Set##custom-display"))
+        {
+            ApplySimulatedDisplay(
+                Math.Clamp(_customDisplaySize.X, 320, 16384),
+                Math.Clamp(_customDisplaySize.Y, 240, 16384));
+        }
+        ImGui.TextDisabled($"UI scale {_session.Ui.AppliedUiScale:0.###}");
+        ImGui.EndMenu();
+    }
+
+    private void ApplyStoredSimulatedDisplay()
+    {
+        if (_session is null || _installations.Count == 0)
+            return;
+        var productSettings = CurrentProductSettings();
+        if (productSettings.SimulatedWidth is not { } width ||
+            productSettings.SimulatedHeight is not { } height)
+            return;
+        _session.Resize(width, height);
+        _customDisplaySize = new Vector2D<int>(width, height);
+    }
+
+    private void ApplySimulatedDisplay(int width, int height)
+    {
+        if (_session is null)
+            return;
+        _session.Resize(width, height);
+        _customDisplaySize = new Vector2D<int>(width, height);
+        if (_installations.Count == 0)
+            return;
+        var productSettings = CurrentProductSettings();
+        productSettings.SimulatedWidth = width;
+        productSettings.SimulatedHeight = height;
+        PersistSettings();
+    }
+
+    private static void ToolbarGroupGap(float iconSize)
+    {
+        ImGui.SameLine(0, MathF.Round(iconSize * ToolbarGroupGapScale));
+    }
+
+    private bool ToolbarModeButton(IconSheetIcon icon, string label, ViewportControlMode mode)
+    {
+        var selected = _viewportMode == mode;
+        if (selected)
+        {
+            ImGui.PushStyleColor(
+                ImGuiCol.Button,
+                ImGui.GetStyle().Colors[(int)ImGuiCol.Header]);
+        }
+        var pressed = ToolbarButton(icon, label, null, false);
+        if (selected)
+            ImGui.PopStyleColor();
+        return pressed;
     }
 
     private bool ToolbarButton(
@@ -553,20 +681,25 @@ public sealed class LabHost : IDisposable
             ImGui.End();
             return;
         }
-        var scale = MathF.Max(0.01f, MathF.Min(
-            available.X / _session!.Ui.LogicalWidth,
-            available.Y / _session.Ui.LogicalHeight));
+        var scale = _canvasFit
+            ? FitCanvasScale(available)
+            : _canvasManualScale;
         _canvasScale = scale;
-        _canvasSize = new Vector2(_session.Ui.LogicalWidth * scale, _session.Ui.LogicalHeight * scale);
-        _canvasOrigin = contentOrigin + Vector2.Max(Vector2.Zero, (available - _canvasSize) / 2);
+        _canvasSize = new Vector2(_session!.Ui.LogicalWidth * scale, _session.Ui.LogicalHeight * scale);
+        _canvasOrigin = CanvasCentre(contentOrigin, available, _canvasSize) +
+                        (_canvasFit
+                            ? Vector2.Zero
+                            : ElasticCanvasPan(contentOrigin, available, _canvasSize));
 
         var drawList = ImGui.GetWindowDrawList();
         drawList.AddRectFilled(contentOrigin, contentOrigin + available, 0xFF050506);
         drawList.PushClipRect(_canvasOrigin, _canvasOrigin + _canvasSize, true);
         RenderViewportGrid(drawList, _canvasOrigin, _canvasSize, scale);
+        var viewportHovered = ImGui.IsWindowHovered() && !_splitterHot;
         if (_loadingStatus is null)
         {
-            RouteCanvasInput(ImGui.IsWindowHovered() && !_splitterHot);
+            RouteCanvasInput(
+                viewportHovered && _viewportMode == ViewportControlMode.Interact);
         }
         else
         {
@@ -584,7 +717,207 @@ public sealed class LabHost : IDisposable
         RenderInspectorSelectionOverlay(drawList);
         drawList.PopClipRect();
         RenderLoadingOverlay(drawList, contentOrigin, available);
+        UpdateCanvasNavigation(viewportHovered, contentOrigin, available);
         ImGui.End();
+    }
+
+    private float FitCanvasScale(Vector2 available) =>
+        MathF.Max(0.01f, MathF.Min(
+            available.X / _session!.Ui.LogicalWidth,
+            available.Y / _session.Ui.LogicalHeight));
+
+    private static Vector2 CanvasCentre(Vector2 contentOrigin, Vector2 available, Vector2 size) =>
+        contentOrigin + Vector2.Max(Vector2.Zero, (available - size) / 2);
+
+    private static float DisplayFramebufferScale()
+    {
+        var scale = ImGui.GetIO().DisplayFramebufferScale.Y;
+        return scale > 0 ? scale : 1;
+    }
+
+    internal static Vector2 ClampCanvasPan(
+        Vector2 pan,
+        Vector2 contentOrigin,
+        Vector2 available,
+        Vector2 size)
+    {
+        var centre = CanvasCentre(contentOrigin, available, size);
+        var margin = Vector2.Min(size, available) * CanvasMinimumVisibleFraction;
+        return Vector2.Clamp(
+            pan,
+            contentOrigin + margin - size - centre,
+            contentOrigin + available - margin - centre);
+    }
+
+    private Vector2 ElasticCanvasPan(Vector2 contentOrigin, Vector2 available, Vector2 size)
+    {
+        var clamped = ClampCanvasPan(_canvasPan, contentOrigin, available, size);
+        return clamped + (_canvasPan - clamped) * CanvasPanRubberBand;
+    }
+
+    private void SettleCanvasPan(Vector2 contentOrigin, Vector2 available)
+    {
+        var delta = MathF.Min(ImGui.GetIO().DeltaTime, 0.05f);
+        if (delta <= 0)
+            return;
+
+        var size = new Vector2(
+            _session!.Ui.LogicalWidth * _canvasManualScale,
+            _session.Ui.LogicalHeight * _canvasManualScale);
+        if (_canvasPanVelocity != Vector2.Zero)
+        {
+            _canvasPan += _canvasPanVelocity * delta;
+            _canvasPanVelocity *= MathF.Exp(-CanvasPanInertiaDamping * delta);
+            if (_canvasPanVelocity.Length() < CanvasPanMinimumVelocity)
+                _canvasPanVelocity = Vector2.Zero;
+        }
+
+        var clamped = ClampCanvasPan(_canvasPan, contentOrigin, available, size);
+        if ((_canvasPan - clamped).LengthSquared() <=
+            CanvasPanSettleEpsilon * CanvasPanSettleEpsilon)
+        {
+            _canvasPan = clamped;
+            return;
+        }
+        _canvasPan = Vector2.Lerp(
+            _canvasPan,
+            clamped,
+            1 - MathF.Exp(-CanvasPanSettleRate * delta));
+        _canvasPanVelocity *= 0.5f;
+    }
+
+    private void FitCanvas()
+    {
+        _canvasFit = true;
+        _canvasPan = Vector2.Zero;
+        _canvasPanVelocity = Vector2.Zero;
+    }
+
+    private void SetCanvasActualSize()
+    {
+        if (_session is null)
+            return;
+        var logicalWidth = _session.Ui.LogicalWidth;
+        if (logicalWidth <= float.Epsilon)
+            return;
+        _canvasFit = false;
+        _canvasPan = Vector2.Zero;
+        _canvasManualScale = Math.Clamp(
+            _session.Ui.PhysicalWidth / logicalWidth / DisplayFramebufferScale(),
+            CanvasMinimumScale,
+            CanvasMaximumScale);
+    }
+
+    private void BeginManualCanvas()
+    {
+        if (!_canvasFit)
+            return;
+        _canvasFit = false;
+        _canvasManualScale = _canvasScale;
+        _canvasPan = Vector2.Zero;
+    }
+
+    private void ZoomCanvasAt(
+        Vector2 anchor,
+        float factor,
+        Vector2 contentOrigin,
+        Vector2 available)
+    {
+        BeginManualCanvas();
+        var previous = _canvasManualScale;
+        var next = Math.Clamp(previous * factor, CanvasMinimumScale, CanvasMaximumScale);
+        if (MathF.Abs(next - previous) < 1e-6f)
+            return;
+
+        var world = (anchor - _canvasOrigin) / previous;
+        _canvasManualScale = next;
+        var size = new Vector2(
+            _session!.Ui.LogicalWidth * next,
+            _session.Ui.LogicalHeight * next);
+        _canvasPan = anchor - world * next - CanvasCentre(contentOrigin, available, size);
+    }
+
+    private void UpdateCanvasNavigation(
+        bool hovered,
+        Vector2 contentOrigin,
+        Vector2 available)
+    {
+        if (_viewportMode == ViewportControlMode.Interact)
+        {
+            _canvasDragButton = -1;
+            if (!_canvasFit)
+                SettleCanvasPan(contentOrigin, available);
+            return;
+        }
+
+        if (hovered || _canvasDragButton >= 0)
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+
+        var io = ImGui.GetIO();
+        var mouse = ImGui.GetMousePos();
+        if (hovered &&
+            _viewportMode == ViewportControlMode.Pan &&
+            MathF.Abs(io.MouseWheel) > float.Epsilon)
+        {
+            ZoomCanvasAt(
+                mouse,
+                MathF.Pow(CanvasScrollZoomStep, io.MouseWheel),
+                contentOrigin,
+                available);
+        }
+
+        if (_canvasDragButton < 0 && hovered)
+        {
+            if (ImGui.IsMouseClicked(ImGuiMouseButton.Middle))
+            {
+                _canvasDragButton = (int)ImGuiMouseButton.Middle;
+                _canvasDragIsZoom = false;
+            }
+            else if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+            {
+                _canvasDragButton = (int)ImGuiMouseButton.Left;
+                _canvasDragIsZoom = _viewportMode == ViewportControlMode.Zoom;
+                _canvasZoomAnchor = mouse;
+            }
+            if (_canvasDragButton >= 0)
+                _canvasPanVelocity = Vector2.Zero;
+        }
+        if (_canvasDragButton < 0)
+        {
+            if (!_canvasFit)
+                SettleCanvasPan(contentOrigin, available);
+            return;
+        }
+
+        var button = (ImGuiMouseButton)_canvasDragButton;
+        if (ImGui.IsMouseReleased(button))
+        {
+            _canvasDragButton = -1;
+            return;
+        }
+
+        var delta = io.MouseDelta;
+        if (delta == Vector2.Zero)
+            return;
+        if (_canvasDragIsZoom)
+        {
+            ZoomCanvasAt(
+                _canvasZoomAnchor,
+                MathF.Exp(delta.X * CanvasDragZoomStep),
+                contentOrigin,
+                available);
+            return;
+        }
+
+        BeginManualCanvas();
+        _canvasPan += delta;
+        if (io.DeltaTime > 0)
+        {
+            _canvasPanVelocity = Vector2.Lerp(
+                _canvasPanVelocity,
+                delta / io.DeltaTime,
+                0.4f);
+        }
     }
 
     private static void RenderViewportGrid(
@@ -2203,6 +2536,7 @@ public sealed class LabHost : IDisposable
         _tactError = null;
         PersistSettings();
         RefreshProduct(loadAddons: false);
+        ApplyStoredSimulatedDisplay();
         if (ShouldLoadBlizzardUi() && _options.AutoConnectTact)
         {
             _reloadAfterTactInitialization = true;

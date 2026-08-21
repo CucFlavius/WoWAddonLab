@@ -1375,7 +1375,11 @@ public sealed class WowUiRenderer : IDisposable
             ui.EffectiveScale(value),
             value.FontSmoothScaling);
         var fontSize = layoutLineHeight * scale * value.FontAnimationFontSizeScale;
-        var rasterFontSize = fontSize * framebufferScaleY;
+        var actualPixelsPerLogicalUnit = ui.LogicalWidth > float.Epsilon
+            ? ui.PhysicalWidth / ui.LogicalWidth
+            : 1;
+        var rasterFontSize =
+            layoutLineHeight * value.FontAnimationFontSizeScale * actualPixelsPerLogicalUnit;
         if (!(rasterFontSize > 0) || !(fontSize > 0))
             return;
         var continuationIndent = font.IndentedWordWrap
