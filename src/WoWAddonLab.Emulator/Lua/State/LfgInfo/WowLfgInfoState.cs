@@ -43,6 +43,8 @@ public sealed class WowLfgInfoState
     public int? RoleCheckDifficultyId { get; set; }
     public bool RoleCheckIsRaid { get; set; }
     public bool IsInFollowerDungeon { get; set; }
+
+    public bool IsInMatchmadeRaidWithoutRoleRequirements { get; set; }
     public int ConfirmExpandSearchCount { get; set; }
 
     public double? DeserterExpiration { get; set; }

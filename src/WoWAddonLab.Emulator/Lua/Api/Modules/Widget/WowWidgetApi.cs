@@ -59,7 +59,8 @@ internal static class WowWidgetApi
         "SetPropagateMouseMotion", "SetScale",
         "SetScript", "SetShown", "SetSize", "SetToDefaults", "SetVertexColor",
         "SetVertexColorFromBoolean", "SetWidth", "ShouldButtonPassThrough", "Show",
-        "StopAnimating"
+        "StopAnimating",
+        "GetRoundLayoutToNearestPixel", "SetRoundLayoutToNearestPixel"
     ];
 
     private static readonly string[] Frame =
@@ -321,7 +322,7 @@ internal static class WowWidgetApi
         "SetQuestBlobRingAlpha", "SetQuestBlobRingScalar", "SetQuestBlobRingTexture",
         "SetTaskBlobInsideAlpha", "SetTaskBlobInsideTexture", "SetTaskBlobOutsideAlpha",
         "SetTaskBlobOutsideTexture", "SetTaskBlobRingAlpha", "SetTaskBlobRingScalar",
-        "SetTaskBlobRingTexture", "SetZoom", "UpdateBlips"
+        "SetTaskBlobRingTexture", "SetZoom", "UpdateBlips", "SetIconScale"
     ];
 
     private static readonly string[] QuestPoi =

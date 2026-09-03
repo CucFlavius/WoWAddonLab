@@ -27,6 +27,7 @@ internal sealed class WowLfgInfoApi : LuaApiModule
         "HideNameFromUI",
         "IsGroupFinderEnabled",
         "IsInLFGFollowerDungeon",
+        "IsInMatchmadeRaidWithoutRoleRequirements",
         "IsLFDEnabled",
         "IsLFGFollowerDungeon",
         "IsLFREnabled"
@@ -126,6 +127,8 @@ internal sealed class WowLfgInfoApi : LuaApiModule
             "IsGroupFinderEnabled" => PushBoolean(state, true),
             "IsInLFGFollowerDungeon" =>
                 PushBoolean(state, lfg.IsInFollowerDungeon),
+            "IsInMatchmadeRaidWithoutRoleRequirements" =>
+                PushBoolean(state, lfg.IsInMatchmadeRaidWithoutRoleRequirements),
             "IsLFDEnabled" => PushBoolean(state, true),
             "IsLFGFollowerDungeon" =>
                 IsLfgFollowerDungeon(state, lfg),

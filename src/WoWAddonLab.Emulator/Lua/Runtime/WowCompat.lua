@@ -45,6 +45,191 @@ math.atan2 = math.atan2 or function(y, x)
     return 0
 end
 
+math.clamp = math.clamp or function(value, minimum, maximum)
+    if minimum > maximum then
+        return maximum
+    end
+    if value < minimum then
+        return minimum
+    end
+    if value > maximum then
+        return maximum
+    end
+    return value
+end
+
+math.lerp = math.lerp or function(startValue, endValue, amount)
+    return (endValue - startValue) * amount + startValue
+end
+
+math.normalize = math.normalize or function(value, minimum, maximum)
+    if minimum == maximum then
+        return 0
+    end
+    return (value - minimum) / (maximum - minimum)
+end
+
+math.remap = math.remap or function(
+    value,
+    sourceMinimum,
+    sourceMaximum,
+    destinationMinimum,
+    destinationMaximum)
+    local amount = 0
+    if sourceMinimum ~= sourceMaximum then
+        amount = (value - sourceMinimum) / (sourceMaximum - sourceMinimum)
+    end
+    return (destinationMaximum - destinationMinimum) * amount + destinationMinimum
+end
+
+math.round = math.round or function(value, decimalPlaces)
+    local scale = 10 ^ (decimalPlaces or 0)
+    if scale < 0.000001 then
+        return 0
+    end
+    local scaled = value * scale
+    if scaled >= 0 then
+        return math.floor(scaled + 0.5) / scale
+    end
+    return math.ceil(scaled - 0.5) / scale
+end
+
+math.saturate = math.saturate or function(value)
+    if not (value >= 0) then
+        return 0
+    end
+    if value > 1 then
+        return 1
+    end
+    return value
+end
+
+math.sign = math.sign or function(value)
+    if value <= 0 then
+        if value >= 0 then
+            return 0
+        end
+        return -1
+    end
+    return 1
+end
+
+math.wrap = math.wrap or function(value, minimum, maximum)
+    local range = maximum - minimum
+    if range > 0 then
+        return minimum + math.fmod(math.fmod(value - minimum, range) + range, range)
+    end
+    return minimum
+end
+
+table.contains = table.contains or function(tbl, value)
+    for _, entry in pairs(tbl) do
+        if entry == value then
+            return true
+        end
+    end
+    return false
+end
+
+table.count = table.count or function(tbl)
+    local total = 0
+    for _ in pairs(tbl) do
+        total = total + 1
+    end
+    return total
+end
+
+table.indexof = table.indexof or function(tbl, value)
+    for index = 1, #tbl do
+        if tbl[index] == value then
+            return index
+        end
+    end
+    return nil
+end
+
+table.isempty = table.isempty or function(tbl)
+    return next(tbl) == nil
+end
+
+table.isfrozen = table.isfrozen or function()
+    return false
+end
+
+table.keys = table.keys or function(tbl)
+    local keys = {}
+    for key in pairs(tbl) do
+        keys[#keys + 1] = key
+    end
+    return keys
+end
+
+table.values = table.values or function(tbl)
+    local values = {}
+    for _, value in pairs(tbl) do
+        values[#values + 1] = value
+    end
+    return values
+end
+
+table.removeunordered = table.removeunordered or function(tbl, index)
+    local count = #tbl
+    index = index or count
+    if index < 1 or index > count then
+        return nil
+    end
+    local removed = tbl[index]
+    if index ~= count then
+        tbl[index] = tbl[count]
+    end
+    tbl[count] = nil
+    return removed
+end
+
+table.removevalue = table.removevalue or function(tbl, value)
+    local count = #tbl
+    local target = 1
+    for index = 1, count do
+        if tbl[index] ~= value then
+            if target ~= index then
+                tbl[target] = tbl[index]
+            end
+            target = target + 1
+        end
+    end
+    for index = target, count do
+        tbl[index] = nil
+    end
+    return count - target + 1
+end
+
+C_Timer.NewTimedSignalMap = C_Timer.NewTimedSignalMap or function(callback)
+    local pendingGeneration = {}
+    local signalMap = {}
+
+    function signalMap:SignalAt(key, time)
+        local generation = (pendingGeneration[key] or 0) + 1
+        pendingGeneration[key] = generation
+        local delay = time - GetTime()
+        if delay < 0 then
+            delay = 0
+        end
+        C_Timer.After(delay, function()
+            if pendingGeneration[key] ~= generation then
+                return
+            end
+            pendingGeneration[key] = nil
+            callback(key)
+        end)
+    end
+
+    function signalMap:CancelSignal(key)
+        pendingGeneration[key] = (pendingGeneration[key] or 0) + 1
+    end
+
+    return signalMap
+end
+
 max = max or math.max
 min = min or math.min
 abs = abs or math.abs
