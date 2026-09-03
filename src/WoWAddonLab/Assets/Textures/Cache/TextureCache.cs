@@ -34,7 +34,9 @@ public sealed class TextureCache : IDisposable
         string? imageCacheDirectory = null)
     {
         _gl = gl;
-        _localAssets = new LocalAddonAssetSource(addonRoots);
+        _localAssets = new LocalAddonAssetSource(
+            addonRoots,
+            message => log.Warn("assets", message));
         _log = log;
         _decodedImages = string.IsNullOrWhiteSpace(imageCacheDirectory)
             ? null

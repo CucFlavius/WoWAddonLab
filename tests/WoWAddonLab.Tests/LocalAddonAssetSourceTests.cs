@@ -124,6 +124,48 @@ public sealed class LocalAddonAssetSourceTests
     public void DefaultBlpPathMatchesClientBehavior(string input, string expected) =>
         Assert.Equal(expected, WowFileAssetPath.WithDefaultBlpExtension(input));
 
+    [Fact]
+    public void ReadSkipsRootWhoseJunctionTargetIsMissing()
+    {
+        using var files = new TestAddonFiles();
+        files.Write(@"Textures\logo.blp", [7, 7, 7]);
+        var parent = Path.GetDirectoryName(files.Root)!;
+        var dangling = Path.Combine(parent, "BrokenAddon");
+        var missingTarget = Path.Combine(parent, "no-such-target");
+        if (!TryCreateJunction(dangling, missingTarget))
+            return;
+
+        try
+        {
+            var warnings = new List<string>();
+            var source = new LocalAddonAssetSource([dangling, files.Root], warnings.Add);
+
+            Assert.Equal([7, 7, 7], source.Read(@"Interface\AddOns\AllTheThings\Textures\logo.blp"));
+            Assert.Null(source.Read(@"Interface\AddOns\BrokenAddon\Textures\logo.blp"));
+            Assert.Contains(warnings, warning => warning.Contains("BrokenAddon", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(dangling);
+        }
+    }
+
+    private static bool TryCreateJunction(string link, string target)
+    {
+        var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = $"/c mklink /J \"{link}\" \"{target}\"",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        });
+        if (process is null)
+            return false;
+        process.WaitForExit();
+        return process.ExitCode == 0 && Directory.Exists(link);
+    }
+
     private sealed class TestAddonFiles : IDisposable
     {
         public TestAddonFiles(string name = "AllTheThings")

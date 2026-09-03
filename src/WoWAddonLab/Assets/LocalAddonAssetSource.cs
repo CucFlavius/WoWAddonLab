@@ -13,10 +13,12 @@ internal sealed class LocalAddonAssetSource
     };
 
     private readonly string[] _roots;
+    private readonly Action<string>? _warn;
     private readonly Lazy<AssetIndex> _index;
 
-    public LocalAddonAssetSource(IEnumerable<string> addonRoots)
+    public LocalAddonAssetSource(IEnumerable<string> addonRoots, Action<string>? warn = null)
     {
+        _warn = warn;
         _roots = addonRoots
             .Select(Path.GetFullPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -91,7 +93,7 @@ internal sealed class LocalAddonAssetSource
             StringComparer.OrdinalIgnoreCase);
         foreach (var root in _roots)
         {
-            var rootFiles = IndexRoot(root);
+            var rootFiles = IndexRoot(root, _warn);
             foreach (var file in rootFiles)
                 files.TryAdd(file.Key, file.Value);
             namedRoots[Path.GetFileName(root.TrimEnd(
@@ -101,14 +103,21 @@ internal sealed class LocalAddonAssetSource
         return new AssetIndex(files, namedRoots);
     }
 
-    private static Dictionary<string, string> IndexRoot(string root)
+    private static Dictionary<string, string> IndexRoot(string root, Action<string>? warn)
     {
         var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (!Directory.Exists(root))
             return files;
 
-        foreach (var path in Directory.EnumerateFiles(root, "*", FileEnumeration))
-            files.TryAdd(Path.GetRelativePath(root, path).Replace('/', '\\'), path);
+        try
+        {
+            foreach (var path in Directory.EnumerateFiles(root, "*", FileEnumeration))
+                files.TryAdd(Path.GetRelativePath(root, path).Replace('/', '\\'), path);
+        }
+        catch (IOException exception)
+        {
+            warn?.Invoke($"Asset root could not be read: {root} ({exception.Message})");
+        }
         return files;
     }
 

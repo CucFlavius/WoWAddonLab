@@ -9,6 +9,9 @@ public sealed class WowUnitState
     public string ClassName { get; set; } = "Warrior";
     public string ClassFile { get; set; } = "WARRIOR";
     public int ClassId { get; set; } = 1;
+    public string RaceName { get; set; } = "Human";
+    public string RaceFile { get; set; } = "Human";
+    public int RaceId { get; set; } = 1;
     public int Sex { get; set; } = 2;
     public string? FactionGroupTag { get; set; } = "Alliance";
     public string? LocalizedFactionGroup { get; set; } = "Alliance";

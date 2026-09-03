@@ -23,6 +23,7 @@ internal sealed class WowUnitApi : LuaApiModule
         "UnitClass",
         "UnitClassBase",
         "UnitClassification",
+        "UnitRace",
         "UnitDamage",
         "UnitEffectiveLevel",
         "UnitExists",
@@ -585,6 +586,13 @@ internal sealed class WowUnitApi : LuaApiModule
                 PushOptionalString(state, unit.ClassName);
                 PushOptionalString(state, unit.ClassFile);
                 lua_pushinteger(state, unit.ClassId);
+                return 3;
+            case "UnitRace":
+                if (unit is null)
+                    return 0;
+                PushOptionalString(state, unit.RaceName);
+                PushOptionalString(state, unit.RaceFile);
+                lua_pushinteger(state, unit.RaceId);
                 return 3;
             case "UnitClassBase":
                 RequireUnitToken(

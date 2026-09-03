@@ -7,6 +7,7 @@ using WoWAddonLab.Assets;
 using WoWAddonLab.Configuration;
 using WoWAddonLab.Diagnostics;
 using WoWAddonLab.Rendering;
+using WoWAddonLab.Simulation;
 using WoWAddonLab.Automation;
 using WoWAddonLab.Emulator.Diagnostics;
 using WoWAddonLab.Emulator.UI;
@@ -37,6 +38,9 @@ public sealed class LabHost : IDisposable
     private IReadOnlyList<InstalledAddon> _loadedAddons = [];
     private IReadOnlyList<SavedVariablesProfile> _savedVariableProfiles = [];
     private readonly WoWAddonLabSettingsStore _settingsStore = new();
+    private readonly SimulationProfileStore _simulationStore = new();
+    private SimulationController? _simulation;
+    private SimulationWindow? _simulationWindow;
     private WoWAddonLabSettings _settings = new();
     private TactAssetSource? _tact;
     private TactAtlasCatalog? _atlasCatalog;
@@ -80,6 +84,8 @@ public sealed class LabHost : IDisposable
     private bool _step;
     private bool _toolsVisible = true;
     private bool _toolbarVisible = true;
+    private bool _imguiWantsKeyboard;
+    private bool _imguiWantsTextInput;
     private bool _viewportHovered;
     private bool _fontAtlasCanMutate;
     private bool _viewportFocused = true;
@@ -92,14 +98,15 @@ public sealed class LabHost : IDisposable
     private float _toolbarHeight;
     private IconSheet? _icons;
 
-    private ViewportControlMode _viewportMode = ViewportControlMode.Interact;
+    private bool _navigateMode;
     private bool _canvasFit = true;
     private float _canvasManualScale = 1;
     private Vector2 _canvasPan;
-    private Vector2 _canvasZoomAnchor;
     private Vector2D<int> _customDisplaySize;
-    private int _canvasDragButton = -1;
-    private bool _canvasDragIsZoom;
+    private bool _canvasPanning;
+    private bool _canvasPanned;
+    private Vector2 _canvasPanOrigin;
+    private bool _pendingRightClick;
     private Vector2 _canvasPanVelocity;
 
     private const float SplitterGrabWidth = 8;
@@ -107,18 +114,21 @@ public sealed class LabHost : IDisposable
     private const float CanvasMinimumScale = 0.05f;
     private const float CanvasMaximumScale = 16;
     private const float CanvasScrollZoomStep = 1.15f;
-    private const float CanvasDragZoomStep = 0.005f;
     private const float CanvasMinimumVisibleFraction = 0.1f;
     private const float CanvasPanRubberBand = 0.3f;
     private const float CanvasPanSettleRate = 14f;
     private const float CanvasPanInertiaDamping = 6f;
     private const float CanvasPanMinimumVelocity = 24f;
     private const float CanvasPanSettleEpsilon = 0.5f;
+    private const float CanvasPanDragThreshold = 4f;
     private const float ToolbarIconScale = 1.15f;
     private const float ToolbarIconPaddingScale = 0.3f;
     private const float ToolbarEdgePaddingScale = 0.18f;
     private const float ToolbarDisabledAlpha = 0.5f;
     private const float ToolbarActiveBrighten = 1.35f;
+    private const float ToolbarSelectedBrighten = 1.3f;
+    private const float ToolbarSelectedHoverBrighten = 1.6f;
+    private const float ToolbarSelectedActiveBrighten = 1.85f;
     private bool _splitterDirty;
     private bool _splitterDragging;
     private bool _splitterHot;
@@ -226,7 +236,13 @@ public sealed class LabHost : IDisposable
                 _options.LogicalHeight,
                 luaCacheDirectory: WoWAddonLabPaths.LuaCacheDirectory);
         _session.LoadProgress += OnAddonLoadProgress;
+        _simulation = new SimulationController(_simulationStore);
+        _simulationWindow = new SimulationWindow(_simulation)
+        {
+            FocusTaken = () => _viewportFocused = false
+        };
         ApplyStoredSimulatedDisplay();
+        AttachSimulation();
         if (_input.Keyboards.FirstOrDefault() is { } primaryKeyboard)
         {
             _session.ClipboardReader = () => primaryKeyboard.ClipboardText;
@@ -287,6 +303,9 @@ public sealed class LabHost : IDisposable
             _fontAtlasCanMutate = false;
         }
         _imgui!.Update((float)deltaSeconds);
+        var io = ImGui.GetIO();
+        _imguiWantsKeyboard = io.WantCaptureKeyboard;
+        _imguiWantsTextInput = io.WantTextInput;
         if (_reloadTask is null)
             UpdateDisplayDpiScale();
         if (_reloadTask is null)
@@ -323,6 +342,8 @@ public sealed class LabHost : IDisposable
         UpdateSplitterInteraction();
         RenderAddonViewport();
         RenderToolWorkspace();
+        if (!SessionBusy)
+            _simulationWindow?.Render();
 
         _imgui!.Render();
         _viewportCapture.ServicePending(
@@ -384,6 +405,11 @@ public sealed class LabHost : IDisposable
                 _toolbarVisible = !_toolbarVisible;
             if (ImGui.MenuItem("Tool workspace", "F1", _toolsVisible))
                 _toolsVisible = !_toolsVisible;
+            if (_simulationWindow is { } simulationWindow &&
+                ImGui.MenuItem("Simulation", "F2", simulationWindow.Visible))
+            {
+                simulationWindow.Visible = !simulationWindow.Visible;
+            }
             ImGui.Separator();
             RenderSimulatedDisplayMenu();
             ImGui.EndMenu();
@@ -448,14 +474,23 @@ public sealed class LabHost : IDisposable
             Reload();
 
         ToolbarGroupGap(iconSize);
-        if (ToolbarModeButton(IconSheetIcon.Interact, "Interact", ViewportControlMode.Interact))
-            _viewportMode = ViewportControlMode.Interact;
+        if (ToolbarToggleButton(
+                IconSheetIcon.Interact,
+                "Toggle Select",
+                "Click a frame in the viewport to select it",
+                _inspectorSelectionMode))
+        {
+            _inspectorSelectionMode = !_inspectorSelectionMode;
+        }
         ImGui.SameLine();
-        if (ToolbarModeButton(IconSheetIcon.Pan, "Pan", ViewportControlMode.Pan))
-            _viewportMode = ViewportControlMode.Pan;
-        ImGui.SameLine();
-        if (ToolbarModeButton(IconSheetIcon.Zoom, "Zoom", ViewportControlMode.Zoom))
-            _viewportMode = ViewportControlMode.Zoom;
+        if (ToolbarToggleButton(
+                IconSheetIcon.Pan,
+                "Toggle Panning",
+                "Right-drag to pan, scroll wheel to zoom",
+                _navigateMode))
+        {
+            _navigateMode = !_navigateMode;
+        }
 
         ToolbarGroupGap(iconSize);
         if (ToolbarButton(IconSheetIcon.FitToViewport, "Fit to viewport", null, false))
@@ -509,6 +544,17 @@ public sealed class LabHost : IDisposable
         ImGui.EndMenu();
     }
 
+    private void AttachSimulation()
+    {
+        if (_session is null || _simulation is null)
+            return;
+        _simulation.Attach(
+            _session,
+            _installations.Count == 0
+                ? null
+                : _installations[_selectedInstallation].ProductPath);
+    }
+
     private void ApplyStoredSimulatedDisplay()
     {
         if (_session is null || _installations.Count == 0)
@@ -540,25 +586,33 @@ public sealed class LabHost : IDisposable
         ImGui.SameLine(0, MathF.Round(iconSize * ToolbarGroupGapScale));
     }
 
-    private bool ToolbarModeButton(IconSheetIcon icon, string label, ViewportControlMode mode)
+    private bool ToolbarToggleButton(
+        IconSheetIcon icon,
+        string label,
+        string? hint,
+        bool selected)
     {
-        var selected = _viewportMode == mode;
         if (selected)
         {
+            var accent = ImGui.GetStyle().Colors[(int)ImGuiCol.HeaderHovered];
+            ImGui.PushStyleColor(ImGuiCol.Button, Brighten(accent, ToolbarSelectedBrighten));
             ImGui.PushStyleColor(
-                ImGuiCol.Button,
-                ImGui.GetStyle().Colors[(int)ImGuiCol.Header]);
+                ImGuiCol.ButtonHovered,
+                Brighten(accent, ToolbarSelectedHoverBrighten));
+            ImGui.PushStyleColor(
+                ImGuiCol.ButtonActive,
+                Brighten(accent, ToolbarSelectedActiveBrighten));
         }
-        var pressed = ToolbarButton(icon, label, null, false);
+        var pressed = ToolbarButton(icon, label, hint, false);
         if (selected)
-            ImGui.PopStyleColor();
+            ImGui.PopStyleColor(3);
         return pressed;
     }
 
     private bool ToolbarButton(
         IconSheetIcon icon,
         string label,
-        string? shortcut,
+        string? hint,
         bool disabled)
     {
         var iconSize = MathF.Round(ImGui.GetFontSize() * ToolbarIconScale);
@@ -575,7 +629,13 @@ public sealed class LabHost : IDisposable
                 Vector4.One);
         ImGui.EndDisabled();
         if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-            ImGui.SetTooltip(shortcut is null ? label : $"{label}   {shortcut}");
+        {
+            ImGui.BeginTooltip();
+            ImGui.TextUnformatted(label);
+            if (hint is not null)
+                ImGui.TextDisabled(hint);
+            ImGui.EndTooltip();
+        }
         return pressed;
     }
 
@@ -659,6 +719,7 @@ public sealed class LabHost : IDisposable
             ImGuiWindowFlags.NoCollapse |
             ImGuiWindowFlags.NoSavedSettings |
             ImGuiWindowFlags.NoScrollbar |
+            ImGuiWindowFlags.NoBringToFrontOnFocus |
             ImGuiWindowFlags.NoScrollWithMouse;
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
@@ -698,8 +759,7 @@ public sealed class LabHost : IDisposable
         var viewportHovered = ImGui.IsWindowHovered() && !_splitterHot;
         if (_loadingStatus is null)
         {
-            RouteCanvasInput(
-                viewportHovered && _viewportMode == ViewportControlMode.Interact);
+            RouteCanvasInput(viewportHovered);
         }
         else
         {
@@ -842,72 +902,55 @@ public sealed class LabHost : IDisposable
         Vector2 contentOrigin,
         Vector2 available)
     {
-        if (_viewportMode == ViewportControlMode.Interact)
+        if (!_navigateMode)
         {
-            _canvasDragButton = -1;
+            _canvasPanning = false;
             if (!_canvasFit)
                 SettleCanvasPan(contentOrigin, available);
             return;
         }
 
-        if (hovered || _canvasDragButton >= 0)
+        if (_canvasPanned)
             ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
 
         var io = ImGui.GetIO();
-        var mouse = ImGui.GetMousePos();
-        if (hovered &&
-            _viewportMode == ViewportControlMode.Pan &&
-            MathF.Abs(io.MouseWheel) > float.Epsilon)
+        if (hovered && MathF.Abs(io.MouseWheel) > float.Epsilon)
         {
             ZoomCanvasAt(
-                mouse,
+                ImGui.GetMousePos(),
                 MathF.Pow(CanvasScrollZoomStep, io.MouseWheel),
                 contentOrigin,
                 available);
         }
 
-        if (_canvasDragButton < 0 && hovered)
+        if (!_canvasPanning && hovered && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
         {
-            if (ImGui.IsMouseClicked(ImGuiMouseButton.Middle))
-            {
-                _canvasDragButton = (int)ImGuiMouseButton.Middle;
-                _canvasDragIsZoom = false;
-            }
-            else if (ImGui.IsMouseClicked(ImGuiMouseButton.Left))
-            {
-                _canvasDragButton = (int)ImGuiMouseButton.Left;
-                _canvasDragIsZoom = _viewportMode == ViewportControlMode.Zoom;
-                _canvasZoomAnchor = mouse;
-            }
-            if (_canvasDragButton >= 0)
-                _canvasPanVelocity = Vector2.Zero;
+            _canvasPanning = true;
+            _canvasPanned = false;
+            _canvasPanOrigin = ImGui.GetMousePos();
+            _canvasPanVelocity = Vector2.Zero;
         }
-        if (_canvasDragButton < 0)
+        if (!_canvasPanning)
         {
             if (!_canvasFit)
                 SettleCanvasPan(contentOrigin, available);
             return;
         }
 
-        var button = (ImGuiMouseButton)_canvasDragButton;
-        if (ImGui.IsMouseReleased(button))
+        if (ImGui.IsMouseReleased(ImGuiMouseButton.Right))
         {
-            _canvasDragButton = -1;
+            _canvasPanning = false;
             return;
         }
 
-        var delta = io.MouseDelta;
-        if (delta == Vector2.Zero)
-            return;
-        if (_canvasDragIsZoom)
+        if (!_canvasPanned &&
+            (ImGui.GetMousePos() - _canvasPanOrigin).Length() >= CanvasPanDragThreshold)
         {
-            ZoomCanvasAt(
-                _canvasZoomAnchor,
-                MathF.Exp(delta.X * CanvasDragZoomStep),
-                contentOrigin,
-                available);
-            return;
+            _canvasPanned = true;
         }
+        var delta = io.MouseDelta;
+        if (!_canvasPanned || delta == Vector2.Zero)
+            return;
 
         BeginManualCanvas();
         _canvasPan += delta;
@@ -957,8 +1000,6 @@ public sealed class LabHost : IDisposable
     {
         if (!_toolsVisible)
         {
-            _inspectorSelectionMode = false;
-            _inspectorHoveredObjectId = null;
             return;
         }
 
@@ -968,6 +1009,7 @@ public sealed class LabHost : IDisposable
             ImGuiWindowFlags.NoMove |
             ImGuiWindowFlags.NoResize |
             ImGuiWindowFlags.NoCollapse |
+            ImGuiWindowFlags.NoBringToFrontOnFocus |
             ImGuiWindowFlags.NoSavedSettings;
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
@@ -982,7 +1024,6 @@ public sealed class LabHost : IDisposable
         if (ImGui.IsWindowHovered() && ImGui.IsMouseClicked(ImGuiMouseButton.Left))
             _viewportFocused = false;
 
-        var inspectorActive = false;
         if (ImGui.BeginTabBar("##workspace-tabs", ImGuiTabBarFlags.FittingPolicyScroll))
         {
             if (ImGui.BeginTabItem("Addons"))
@@ -997,7 +1038,6 @@ public sealed class LabHost : IDisposable
             }
             if (ImGui.BeginTabItem("Inspector"))
             {
-                inspectorActive = true;
                 RenderInspectorContent();
                 ImGui.EndTabItem();
             }
@@ -1013,10 +1053,6 @@ public sealed class LabHost : IDisposable
             }
             ImGui.EndTabBar();
         }
-        _inspectorSelectionMode = inspectorActive;
-        if (!inspectorActive)
-            _inspectorHoveredObjectId = null;
-
         ImGui.End();
     }
 
@@ -2255,13 +2291,20 @@ public sealed class LabHost : IDisposable
                 }
                 if (ImGui.IsMouseClicked(ImGuiMouseButton.Right))
                 {
-                    _session.MouseButton("RightButton", true);
-                    _rightMouseCaptured = true;
-                    _viewportFocused = true;
+                    if (_navigateMode)
+                    {
+                        _pendingRightClick = true;
+                    }
+                    else
+                    {
+                        _session.MouseButton("RightButton", true);
+                        _rightMouseCaptured = true;
+                        _viewportFocused = true;
+                    }
                 }
 
                 var wheel = ImGui.GetIO().MouseWheel;
-                if (MathF.Abs(wheel) > 0.0001f)
+                if (!_navigateMode && MathF.Abs(wheel) > 0.0001f)
                     _session.MouseWheel(wheel);
             }
         }
@@ -2280,12 +2323,24 @@ public sealed class LabHost : IDisposable
             _session!.MouseButton("RightButton", false);
             _rightMouseCaptured = false;
         }
+        if (_pendingRightClick && ImGui.IsMouseReleased(ImGuiMouseButton.Right))
+        {
+            _pendingRightClick = false;
+            if (!_canvasPanned && _viewportHovered)
+            {
+                _session!.MouseButton("RightButton", true);
+                _session.MouseButton("RightButton", false);
+                _viewportFocused = true;
+            }
+        }
     }
 
     private void OnKeyDown(IKeyboard keyboard, Key key, int scanCode)
     {
         if (key == Key.F1)
             _toolsVisible = !_toolsVisible;
+        if (key == Key.F2 && _simulationWindow is { } simulationWindow)
+            simulationWindow.Visible = !simulationWindow.Visible;
         if (key == Key.F6)
             _paused = !_paused;
         if (key == Key.F7 && _paused)
@@ -2297,6 +2352,7 @@ public sealed class LabHost : IDisposable
         }
         if (_loadingStatus is null &&
             _viewportFocused &&
+            !_imguiWantsKeyboard &&
             !_inspectorSelectionMode &&
             ToWowKey(key) is { } wowKey)
             _session!.Key(wowKey, true, IsControlDown(keyboard), IsShiftDown(keyboard), IsAltDown(keyboard));
@@ -2306,6 +2362,7 @@ public sealed class LabHost : IDisposable
     {
         if (_loadingStatus is null &&
             _viewportFocused &&
+            !_imguiWantsKeyboard &&
             !_inspectorSelectionMode &&
             ToWowKey(key) is { } wowKey)
             _session!.Key(wowKey, false, IsControlDown(keyboard), IsShiftDown(keyboard), IsAltDown(keyboard));
@@ -2315,6 +2372,7 @@ public sealed class LabHost : IDisposable
     {
         if (_loadingStatus is null &&
             _viewportFocused &&
+            !_imguiWantsTextInput &&
             !_inspectorSelectionMode &&
             !char.IsControl(character))
             _session!.TextInput(character.ToString());
@@ -2488,11 +2546,14 @@ public sealed class LabHost : IDisposable
         }
         using (StartupTimeline.Begin("create UI renderer"))
             _renderer = new WowUiRenderer(_textures, _addonFonts);
+        AttachSimulation();
     }
 
     private void ConfigureFontAssetReader(ReloadPlan plan)
     {
-        var localAssets = new LocalAddonAssetSource(AssetPaths(plan));
+        var localAssets = new LocalAddonAssetSource(
+            AssetPaths(plan),
+            message => _session!.Log.Warn("assets", message));
         var tact = _tact;
         _session!.FontAssetReader = asset =>
             localAssets.Read(asset, defaultToBlp: true) ?? tact?.Read(asset, null);

@@ -71,4 +71,30 @@ public sealed class WowUnitStateCollection
     public void AssignAlias(string alias, WowUnitState unit) => _aliases[alias] = unit;
 
     public void ClearAlias(string alias) => _aliases.Remove(alias);
+
+    public void Add(WowUnitState unit)
+    {
+        if (unit.Token.Equals("player", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("The player unit cannot be replaced.", nameof(unit));
+        _units[unit.Token] = unit;
+    }
+
+    public bool Remove(string token)
+    {
+        if (token.Equals("player", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("The player unit cannot be removed.", nameof(token));
+        if (!_units.Remove(token, out var removed))
+            return false;
+
+        foreach (var alias in _aliases
+                     .Where(entry => ReferenceEquals(entry.Value, removed))
+                     .Select(entry => entry.Key)
+                     .ToArray())
+        {
+            _aliases.Remove(alias);
+        }
+        return true;
+    }
+
+    public IReadOnlyDictionary<string, WowUnitState> Aliases => _aliases;
 }

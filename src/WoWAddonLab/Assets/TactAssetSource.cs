@@ -11,6 +11,7 @@ public sealed class TactAssetSource : IWowModelResourceProvider
 {
     private readonly WowInstallation _installation;
     private readonly Jenkins96 _hasher = new();
+    private readonly object _readLock = new();
     private readonly Dictionary<string, uint> _resolved = new(StringComparer.Ordinal);
     private readonly Dictionary<uint, WowModelResourceMetadata?> _modelMetadata = [];
     private readonly Dictionary<uint, string?> _filenames = [];
@@ -81,9 +82,14 @@ public sealed class TactAssetSource : IWowModelResourceProvider
             return null;
 
         var id = fileDataId ?? ResolveFileDataId(assetPath);
-        if (id == 0 || _build.Root?.FileExists(id) != true)
+        if (id == 0)
             return null;
-        return _build.OpenFileByFDID(id);
+        lock (_readLock)
+        {
+            if (_build.Root?.FileExists(id) != true)
+                return null;
+            return _build.OpenFileByFDID(id);
+        }
     }
 
     public bool FileExists(uint fileDataId) =>
@@ -193,9 +199,14 @@ public sealed class TactAssetSource : IWowModelResourceProvider
 
     public byte[]? Read(uint fileDataId)
     {
-        if (_build is null || !FileExists(fileDataId))
+        if (_build is null)
             return null;
-        return _build.OpenFileByFDID(fileDataId);
+        lock (_readLock)
+        {
+            if (_build.Root?.FileExists(fileDataId) != true)
+                return null;
+            return _build.OpenFileByFDID(fileDataId);
+        }
     }
 
     public uint ResolveFileDataId(string? assetPath)

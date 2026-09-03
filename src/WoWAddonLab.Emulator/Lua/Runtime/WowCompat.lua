@@ -943,8 +943,24 @@ C_Container.GetContainerNumFreeSlots =
 C_Container.GetContainerFreeSlots = C_Container.GetContainerFreeSlots or function() return {} end
 
 C_ClassColor = C_ClassColor or {}
-C_ClassColor.GetClassColor = C_ClassColor.GetClassColor or function()
-    return CreateColor(0.8, 0.8, 0.8, 1)
+local classColors = {
+    WARRIOR = { 0.78, 0.61, 0.43 },
+    PALADIN = { 0.96, 0.55, 0.73 },
+    HUNTER = { 0.67, 0.83, 0.45 },
+    ROGUE = { 1.00, 0.96, 0.41 },
+    PRIEST = { 1.00, 1.00, 1.00 },
+    DEATHKNIGHT = { 0.77, 0.12, 0.23 },
+    SHAMAN = { 0.00, 0.44, 0.87 },
+    MAGE = { 0.25, 0.78, 0.92 },
+    WARLOCK = { 0.53, 0.53, 0.93 },
+    MONK = { 0.00, 1.00, 0.60 },
+    DRUID = { 1.00, 0.49, 0.04 },
+    DEMONHUNTER = { 0.64, 0.19, 0.79 },
+    EVOKER = { 0.20, 0.58, 0.50 }
+}
+C_ClassColor.GetClassColor = C_ClassColor.GetClassColor or function(classFile)
+    local color = classColors[classFile] or { 0.8, 0.8, 0.8 }
+    return CreateColor(color[1], color[2], color[3], 1)
 end
 
 C_ColorUtil = C_ColorUtil or {}
