@@ -7,6 +7,7 @@ using WoWAddonLab.Assets;
 using WoWAddonLab.Configuration;
 using WoWAddonLab.Diagnostics;
 using WoWAddonLab.Rendering;
+using WoWAddonLab.Panels;
 using WoWAddonLab.Simulation;
 using WoWAddonLab.Automation;
 using WoWAddonLab.Emulator.Diagnostics;
@@ -41,6 +42,7 @@ public sealed class LabHost : IDisposable
     private readonly SimulationProfileStore _simulationStore = new();
     private SimulationController? _simulation;
     private SimulationWindow? _simulationWindow;
+    private readonly PanelBrowser _panelBrowser = new();
     private WoWAddonLabSettings _settings = new();
     private TactAssetSource? _tact;
     private TactAtlasCatalog? _atlasCatalog;
@@ -241,8 +243,10 @@ public sealed class LabHost : IDisposable
         {
             FocusTaken = () => _viewportFocused = false
         };
+        _panelBrowser.FocusTaken = () => _viewportFocused = false;
         ApplyStoredSimulatedDisplay();
         AttachSimulation();
+        _panelBrowser.Attach(_session);
         if (_input.Keyboards.FirstOrDefault() is { } primaryKeyboard)
         {
             _session.ClipboardReader = () => primaryKeyboard.ClipboardText;
@@ -344,6 +348,7 @@ public sealed class LabHost : IDisposable
         RenderToolWorkspace();
         if (!SessionBusy)
             _simulationWindow?.Render();
+            _panelBrowser.Render();
 
         _imgui!.Render();
         _viewportCapture.ServicePending(
@@ -410,6 +415,8 @@ public sealed class LabHost : IDisposable
             {
                 simulationWindow.Visible = !simulationWindow.Visible;
             }
+            if (ImGui.MenuItem("Windows", "F3", _panelBrowser.Visible))
+                _panelBrowser.Visible = !_panelBrowser.Visible;
             ImGui.Separator();
             RenderSimulatedDisplayMenu();
             ImGui.EndMenu();
@@ -2341,6 +2348,8 @@ public sealed class LabHost : IDisposable
             _toolsVisible = !_toolsVisible;
         if (key == Key.F2 && _simulationWindow is { } simulationWindow)
             simulationWindow.Visible = !simulationWindow.Visible;
+        if (key == Key.F3)
+            _panelBrowser.Visible = !_panelBrowser.Visible;
         if (key == Key.F6)
             _paused = !_paused;
         if (key == Key.F7 && _paused)
@@ -2547,6 +2556,7 @@ public sealed class LabHost : IDisposable
         using (StartupTimeline.Begin("create UI renderer"))
             _renderer = new WowUiRenderer(_textures, _addonFonts);
         AttachSimulation();
+        _panelBrowser.Attach(_session);
     }
 
     private void ConfigureFontAssetReader(ReloadPlan plan)

@@ -42,7 +42,7 @@ public static partial class BlizzardUiBootstrap
         "Blizzard_UnitFrame",
         "Blizzard_WorldMap"
     ];
-    private const int CacheSchemaVersion = 41;
+    private const int CacheSchemaVersion = 42;
     private static readonly IReadOnlyDictionary<string, string[]> ImplicitInGameDependencies =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
@@ -416,9 +416,18 @@ public static partial class BlizzardUiBootstrap
         string addonName,
         AddonManifestContext context)
     {
+        var directory = $"interface/addons/{addonName.ToLowerInvariant()}";
+        foreach (var suffix in TocSuffixes(context))
+        {
+            var synthesized = source.Read(
+                $"{directory}/{addonName.ToLowerInvariant()}{suffix}.toc",
+                null);
+            if (synthesized is not null)
+                return new ResolvedToc(directory, synthesized);
+        }
+
         if (!catalog.TocByAddon.TryGetValue(addonName, out var candidates))
             return null;
-
         foreach (var candidate in candidates
                      .Where(value => TocScore(value.Path, addonName, context) < 20)
                      .OrderBy(value => TocScore(value.Path, addonName, context))
@@ -432,6 +441,15 @@ public static partial class BlizzardUiBootstrap
                 bytes);
         }
         return null;
+    }
+
+    private static IEnumerable<string> TocSuffixes(AddonManifestContext context)
+    {
+        yield return $"_{context.GameType}";
+        yield return $"_{context.Family}";
+        if (context.Family.Equals("mainline", StringComparison.OrdinalIgnoreCase))
+            yield return "_standard";
+        yield return string.Empty;
     }
 
     private static int TocScore(string path, string addonName, AddonManifestContext context)
@@ -580,7 +598,6 @@ public static partial class BlizzardUiBootstrap
         if (sourcePath is null ||
             listedCascPaths.Contains(sourcePath) ||
             extractedCascPaths.Contains(sourcePath) ||
-            !catalog.ByPath.ContainsKey(sourcePath) ||
             !TryRead(source, catalog, sourcePath, out _))
         {
             return false;
@@ -664,8 +681,11 @@ public static partial class BlizzardUiBootstrap
                 if (string.IsNullOrWhiteSpace(file))
                     continue;
                 var included = CombineCascPath(directory, file);
-                if (!catalog.ByPath.ContainsKey(included))
+                if (!catalog.ByPath.ContainsKey(included) &&
+                    source.ResolveFileDataId(included) == 0)
+                {
                     included = CombineCascPath(addonDirectory, file);
+                }
                 if (!included.StartsWith(addonDirectory + "/", StringComparison.OrdinalIgnoreCase))
                 {
                     warnings.Add($"Cross-addon Blizzard XML include was skipped: {included}");
@@ -723,6 +743,12 @@ public static partial class BlizzardUiBootstrap
         out byte[] bytes)
     {
         bytes = [];
+        if (source.Read(path, null) is { } resolved)
+        {
+            bytes = resolved;
+            return true;
+        }
+
         if (!catalog.ByPath.TryGetValue(path, out var candidates))
             return false;
         foreach (var fileDataId in candidates.AsEnumerable().Reverse())

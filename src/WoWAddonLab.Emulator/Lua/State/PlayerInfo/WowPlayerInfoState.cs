@@ -16,6 +16,8 @@ public sealed class WowPlayerInfoState
     public bool IsMirrorImage { get; set; }
     public bool IsPlayerInRpe { get; set; }
     public bool IsPlayerNpeRestricted { get; set; }
+    public bool IsPlayerEligibleForNpeV2 { get; set; }
+    public string NpeV2FailureReason { get; set; } = string.Empty;
     public bool IsTradingPostAvailable { get; set; }
     public bool IsTravelersLogAvailable { get; set; }
     public bool IsTutorialsTabAvailable { get; set; } = true;

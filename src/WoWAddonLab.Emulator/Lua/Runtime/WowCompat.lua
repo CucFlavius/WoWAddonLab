@@ -203,6 +203,15 @@ table.removevalue = table.removevalue or function(tbl, value)
     return count - target + 1
 end
 
+LoadAddOn = LoadAddOn or function(name)
+    return C_AddOns.LoadAddOn(name)
+end
+
+UIParentLoadAddOn = UIParentLoadAddOn or function(name)
+    local loaded, reason = C_AddOns.LoadAddOn(name)
+    return loaded, reason
+end
+
 C_Timer.NewTimedSignalMap = C_Timer.NewTimedSignalMap or function(callback)
     local pendingGeneration = {}
     local signalMap = {}

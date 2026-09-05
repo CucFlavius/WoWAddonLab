@@ -18,6 +18,7 @@ internal sealed class WowPlayerInfoApi : LuaApiModule
         "GetNativeDisplayID",
         "IsDisplayRaceNative",
         "IsMirrorImage",
+        "IsPlayerEligibleForNPEv2",
         "IsPlayerInRPE",
         "IsPlayerNPERestricted",
         "IsTradingPostAvailable",
@@ -84,6 +85,10 @@ internal sealed class WowPlayerInfoApi : LuaApiModule
             case "IsMirrorImage":
                 lua_pushboolean(state, player.IsMirrorImage ? 1 : 0);
                 return 1;
+            case "IsPlayerEligibleForNPEv2":
+                lua_pushboolean(state, player.IsPlayerEligibleForNpeV2 ? 1 : 0);
+                lua_pushstring(state, player.NpeV2FailureReason);
+                return 2;
             case "IsPlayerInRPE":
                 lua_pushboolean(state, player.IsPlayerInRpe ? 1 : 0);
                 return 1;
