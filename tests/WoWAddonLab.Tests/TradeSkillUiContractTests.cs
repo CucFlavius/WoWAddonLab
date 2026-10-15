@@ -9,6 +9,7 @@ public sealed class TradeSkillUiContractTests
         "AnyRecipeCategoriesFiltered",
         "AreAnyInventorySlotsFiltered",
         "CanStoreEnchantInItem",
+        "CanTradeSkillShowCraftingUI",
         "CancelProfessionRespec",
         "CheckRespecNPC",
         "ClearInventorySlotFilter",

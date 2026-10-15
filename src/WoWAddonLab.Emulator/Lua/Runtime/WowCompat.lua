@@ -1135,6 +1135,386 @@ C_Container = C_Container or {}
 C_Container.GetContainerNumFreeSlots =
     C_Container.GetContainerNumFreeSlots or function() return 0, 0 end
 C_Container.GetContainerFreeSlots = C_Container.GetContainerFreeSlots or function() return {} end
+C_Container.GetContainerItemInfo = C_Container.GetContainerItemInfo or function() return nil end
+
+local moduleValues = { [false] = {}, [true] = {} }
+local moduleNamesBySource = {}
+local moduleDependencies = {}
+local nilModule = {}
+
+function __WoWAddonLabRegisterModuleSource(moduleName, source)
+    moduleNamesBySource[source] = moduleName
+end
+
+function __WoWAddonLabRegisterModule(moduleName, isSecure, value)
+    moduleValues[isSecure][string.lower(moduleName)] = value == nil and nilModule or value
+end
+
+function __WoWAddonLabSetModuleDependencies(addonName, dependencies)
+    local names = {}
+    for name in pairs(dependencies) do
+        names[string.lower(name)] = true
+    end
+    moduleDependencies[string.lower(addonName)] = names
+end
+
+import = import or function(name)
+    if type(name) ~= "string" then
+        error("Usage: import(moduleName)", 2)
+    end
+    if name == "" then
+        error("Invalid import: Module name is empty", 2)
+    end
+    local caller = moduleNamesBySource[debug.getinfo(2, "S").source]
+    if string.sub(name, 1, 1) == "." then
+        if not caller then
+            error("Invalid import: Can't perform a relative import from a non-module", 2)
+        end
+        local base, rest = caller, name
+        while string.sub(rest, 1, 1) == "." do
+            base = string.match(base, "^(.*)%.[^.]*$")
+            if not base then
+                error("Invalid import: Relative imports may only be used within the same addon", 2)
+            end
+            rest = string.sub(rest, 2)
+        end
+        if rest ~= "" then
+            name = base .. "." .. rest
+        elseif string.find(base, ".", 1, true) then
+            error("Invalid import: Relative imports without a trailing identifier may only refer to the addon root", 2)
+        else
+            name = base
+        end
+    end
+    if not string.find(name, ".", 1, true) then
+        name = name .. ".init"
+    end
+    if caller then
+        local callerAddon = string.lower(string.match(caller, "^[^.]*"))
+        local targetAddon = string.lower(string.match(name, "^[^.]*"))
+        if callerAddon ~= targetAddon and
+            not (moduleDependencies[callerAddon] and moduleDependencies[callerAddon][targetAddon]) then
+            error("Invalid import: Modules from other addons may only be imported if the calling addon has a direct dependency on the addon being imported", 2)
+        end
+    end
+    local value = moduleValues[getfenv(2) ~= _G][string.lower(name)]
+    if value == nil then
+        error("Invalid import: No module with that name exists", 2)
+    end
+    if value == nilModule then
+        return nil
+    end
+    return value
+end
+
+C_InputInterfaceStyle = C_InputInterfaceStyle or {}
+C_InputInterfaceStyle.GetCurrentStyle = C_InputInterfaceStyle.GetCurrentStyle or function()
+    return Enum.InputDeviceInterfaceType.Mkb
+end
+
+C_GamePad = C_GamePad or {}
+C_GamePad.GetActiveDeviceID = C_GamePad.GetActiveDeviceID or function() return -1 end
+C_GamePad.GetDeviceMappedState = C_GamePad.GetDeviceMappedState or function() return nil end
+C_GamePad.StickIndexToConfigName = C_GamePad.StickIndexToConfigName or function() return nil end
+C_GamePad.SetAllowHoverEventsWithFreeLook = C_GamePad.SetAllowHoverEventsWithFreeLook or function() end
+
+C_GamepadUI = C_GamepadUI or {}
+C_GamepadUI.GetFirstGamepadActionStorageSlotIndex =
+    C_GamepadUI.GetFirstGamepadActionStorageSlotIndex or function() return 0 end
+C_GamepadUI.GetFirstGamepadActionBarStorageSlotIndexForActiveStance =
+    C_GamepadUI.GetFirstGamepadActionBarStorageSlotIndexForActiveStance or function() return nil end
+
+C_ActionBar = C_ActionBar or {}
+C_ActionBar.ShouldShowKeyring = C_ActionBar.ShouldShowKeyring or function() return false end
+C_ActionBar.EnableActionCombatActionRangeCheck =
+    C_ActionBar.EnableActionCombatActionRangeCheck or function() end
+C_ActionBar.EnterActionButton = C_ActionBar.EnterActionButton or function() end
+C_ActionBar.LeaveActionButton = C_ActionBar.LeaveActionButton or function() end
+
+C_AuctionHouse = C_AuctionHouse or {}
+C_AuctionHouse.GetItemKeySampleLink = C_AuctionHouse.GetItemKeySampleLink or function() return nil end
+
+C_AutoLoot = C_AutoLoot or {}
+C_AutoLoot.SetUseAutoLootToggle = C_AutoLoot.SetUseAutoLootToggle or function() end
+
+C_Bank.ShouldUsePlayerBagsInBank = C_Bank.ShouldUsePlayerBagsInBank or function() return false end
+
+C_BattleNet = C_BattleNet or {}
+C_BattleNet.AreHighResTexturesInstalled =
+    C_BattleNet.AreHighResTexturesInstalled or function() return true end
+C_BattleNet.IsFriendTagSupportedForCurrentGameType =
+    C_BattleNet.IsFriendTagSupportedForCurrentGameType or function() return true end
+C_BattleNet.SetBlocked = C_BattleNet.SetBlocked or function() end
+
+C_BlizzCon2026 = C_BlizzCon2026 or {}
+C_BlizzCon2026.SetExperience = C_BlizzCon2026.SetExperience or function() end
+
+C_CatalogShop = C_CatalogShop or {}
+C_CatalogShop.BypassAchievementRequirement =
+    C_CatalogShop.BypassAchievementRequirement or function() return false end
+C_CatalogShop.ConfirmVCProductPurchase = C_CatalogShop.ConfirmVCProductPurchase or function() end
+C_CatalogShop.GetSelectionGroupInfo = C_CatalogShop.GetSelectionGroupInfo or function() return {} end
+C_CatalogShop.IsFinishedLoadingVirtualCurrencies =
+    C_CatalogShop.IsFinishedLoadingVirtualCurrencies or function() return true end
+C_CatalogShop.OpenCatalogShopInteractionFromRewards =
+    C_CatalogShop.OpenCatalogShopInteractionFromRewards or function() return "" end
+C_CatalogShop.PurchaseProductWithSelectedProducts =
+    C_CatalogShop.PurchaseProductWithSelectedProducts or function() return false end
+C_CatalogShop.ShouldDisplayUsesTemporaryCharactersWarningText =
+    C_CatalogShop.ShouldDisplayUsesTemporaryCharactersWarningText or function() return false end
+C_CatalogShop.ValidateOverrideShopInteraction =
+    C_CatalogShop.ValidateOverrideShopInteraction or function() return false end
+
+PlatformIsHandheld = PlatformIsHandheld or function() return false end
+UIReload = UIReload or function() if ReloadUI then ReloadUI() end end
+
+C_Discord.IsVoiceEnabled = C_Discord.IsVoiceEnabled or function() return false end
+
+C_EditMode = C_EditMode or {}
+C_EditMode.GetEditModeDefaultLayout = C_EditMode.GetEditModeDefaultLayout or function()
+    return Enum.EditModePresetLayouts.Modern
+end
+
+C_ExternalEventURL = C_ExternalEventURL or {}
+C_ExternalEventURL.CanShow = C_ExternalEventURL.CanShow or function() return false end
+
+C_GameRules.AccountHasSDEnabled = C_GameRules.AccountHasSDEnabled or function() return false end
+C_GameRules.GetForeverExperiencePreset =
+    C_GameRules.GetForeverExperiencePreset or function() return nil end
+C_GameRules.IsAccountKeyBindingsEnabled =
+    C_GameRules.IsAccountKeyBindingsEnabled or function() return false end
+C_GameRules.IsHardcoreActive = C_GameRules.IsHardcoreActive or function()
+    return C_GameRules.IsGameRuleActive(Enum.GameRule.HardcoreRuleset)
+end
+C_GameRules.IsRewardsShopEnabled = C_GameRules.IsRewardsShopEnabled or function() return false end
+C_GameRules.IsSDHDToggleEnabled = C_GameRules.IsSDHDToggleEnabled or function() return false end
+C_GameRules.SetSDHDToggleValue = C_GameRules.SetSDHDToggleValue or function() end
+
+C_GuildInfo = C_GuildInfo or {}
+C_GuildInfo.GetPreferredPlaySettings = C_GuildInfo.GetPreferredPlaySettings or function()
+    return false, 0, 0, 0, 0, 0
+end
+C_GuildInfo.GetPreferredPlaySettingsFeatures =
+    C_GuildInfo.GetPreferredPlaySettingsFeatures or function() return false, false end
+C_GuildInfo.RequestPreferredPlaySettings =
+    C_GuildInfo.RequestPreferredPlaySettings or function() return false end
+C_GuildInfo.SetPreferredPlaySettings = C_GuildInfo.SetPreferredPlaySettings or function() return false end
+
+C_AccountServices = C_AccountServices or {}
+C_AccountServices.GetPreferredPlaySettings = C_AccountServices.GetPreferredPlaySettings or function()
+    return false, 0, 0, 0, 0, 0
+end
+C_AccountServices.GetPreferredPlaySettingsFeatures =
+    C_AccountServices.GetPreferredPlaySettingsFeatures or function() return false, false end
+C_AccountServices.RequestPreferredPlaySettings =
+    C_AccountServices.RequestPreferredPlaySettings or function() return false end
+C_AccountServices.SetPreferredPlaySettings =
+    C_AccountServices.SetPreferredPlaySettings or function() return false end
+C_AccountServices.GetPreferredLocales = C_AccountServices.GetPreferredLocales or function() return {}, {} end
+C_AccountServices.GetPreferredDatacenterLocalities =
+    C_AccountServices.GetPreferredDatacenterLocalities or function() return {}, {} end
+
+C_Secrets.ShouldUnitIdentityBeSecret = C_Secrets.ShouldUnitIdentityBeSecret or function() return false end
+C_BattleNet.CanToggleHighResTexturesWithoutClientReload =
+    C_BattleNet.CanToggleHighResTexturesWithoutClientReload or function() return false end
+C_Item.GetWeaponEnchantInfo = C_Item.GetWeaponEnchantInfo or function() return {} end
+
+C_HeirloomInfo = C_HeirloomInfo or {}
+C_HeirloomInfo.HeirloomsAvailable = C_HeirloomInfo.HeirloomsAvailable or function() return true end
+C_MountJournal = C_MountJournal or {}
+C_MountJournal.HasDisplayableMount = C_MountJournal.HasDisplayableMount or function() return true end
+C_MountJournal.MountEquipmentAvailable =
+    C_MountJournal.MountEquipmentAvailable or function() return true end
+C_ToyBoxInfo = C_ToyBoxInfo or {}
+C_ToyBoxInfo.HasAnyToy = C_ToyBoxInfo.HasAnyToy or function() return true end
+C_TransmogCollection = C_TransmogCollection or {}
+C_TransmogCollection.HasAnyAppearance = C_TransmogCollection.HasAnyAppearance or function() return true end
+C_WarbandScene = C_WarbandScene or {}
+C_WarbandScene.WarbandScenesAvailable =
+    C_WarbandScene.WarbandScenesAvailable or function() return true end
+
+C_Item.ConfirmDeleteItem = C_Item.ConfirmDeleteItem or function() end
+C_Item.DeleteItem = C_Item.DeleteItem or function() end
+
+C_LFGInfo = C_LFGInfo or {}
+C_LFGInfo.LeaveInstanceBySpell = C_LFGInfo.LeaveInstanceBySpell or function() end
+C_LootFrame = C_LootFrame or {}
+C_LootFrame.TryAutoLoot = C_LootFrame.TryAutoLoot or function() end
+
+C_NameUtil = C_NameUtil or {}
+C_NameUtil.ReplaceSurnameSeparatorWithLinkSeparator =
+    C_NameUtil.ReplaceSurnameSeparatorWithLinkSeparator or function(fullName) return fullName end
+
+C_PaperDollInfo.AmmoNeeded = C_PaperDollInfo.AmmoNeeded or function() return false end
+C_PaperDollInfo.CursorCanGoInSlot = C_PaperDollInfo.CursorCanGoInSlot or function() return false end
+
+C_PartyInfo = C_PartyInfo or {}
+C_PartyInfo.CanPromoteToLeader = C_PartyInfo.CanPromoteToLeader or function() return false end
+C_PartyInfo.IsRaidListEnabled = C_PartyInfo.IsRaidListEnabled or function() return false end
+C_PartyInfo.IsRaidListSupported = C_PartyInfo.IsRaidListSupported or function() return false end
+
+C_PetInfo = C_PetInfo or {}
+C_PetInfo.CanPetEatItem = C_PetInfo.CanPetEatItem or function() return false end
+C_PetInfo.GetPetFoodTypes = C_PetInfo.GetPetFoodTypes or function() return {} end
+C_PetInfo.GetPetHappiness = C_PetInfo.GetPetHappiness or function() return 0, 0, 0 end
+C_PetInfo.GetPetLoyalty = C_PetInfo.GetPetLoyalty or function() return "" end
+C_PetInfo.GetPetTrainingPoints = C_PetInfo.GetPetTrainingPoints or function() return 0, 0 end
+C_PetInfo.GetPetUIModelSceneID = C_PetInfo.GetPetUIModelSceneID or function() return 0 end
+
+C_PlayerInfo = C_PlayerInfo or {}
+C_PlayerInfo.ShouldDisplaySurname = C_PlayerInfo.ShouldDisplaySurname or function() return false end
+C_PlayerInteractionManager = C_PlayerInteractionManager or {}
+C_PlayerInteractionManager.ShardTransferConfirm =
+    C_PlayerInteractionManager.ShardTransferConfirm or function() end
+
+CanPortGraveyard = CanPortGraveyard or function() return false end
+IsOnGroundFloorInJailersTower = IsOnGroundFloorInJailersTower or function() return false end
+GetPetExperience = GetPetExperience or function() return 0, 0 end
+
+C_ScenarioInfo = C_ScenarioInfo or {}
+C_ScenarioInfo.IsTieredEntranceScenario = C_ScenarioInfo.IsTieredEntranceScenario or function() return false end
+GetEvictionTimeRemaining = GetEvictionTimeRemaining or function() return 0 end
+GetMeleeHitChanceTakenModifier = GetMeleeHitChanceTakenModifier or function() return 0 end
+ReagentsFromBankAllowed = ReagentsFromBankAllowed or function() return true end
+ShouldDisplayRaidRolesInSocialFrame = ShouldDisplayRaidRolesInSocialFrame or function() return false end
+ShouldDisplayStoryModeTooltipInSocialFrame =
+    ShouldDisplayStoryModeTooltipInSocialFrame or function() return false end
+
+C_PvP = C_PvP or {}
+C_PvP.GetRandomTrainingGroundArenaRewards =
+    C_PvP.GetRandomTrainingGroundArenaRewards or function() return 0, 0, nil, nil, nil end
+C_PvP.GetRandomTrainingGroundBGRewards =
+    C_PvP.GetRandomTrainingGroundBGRewards or function() return 0, 0, nil, nil, nil end
+C_PvP.JoinRandomTrainingGroundBG = C_PvP.JoinRandomTrainingGroundBG or function() end
+
+C_RaidLocks = C_RaidLocks or {}
+C_RaidLocks.IsRaidLockExtendFeatureSupported =
+    C_RaidLocks.IsRaidLockExtendFeatureSupported or function() return true end
+C_RecentAllies = C_RecentAllies or {}
+C_RecentAllies.IsInteractionCategoryFilterSupportedForCurrentGameType =
+    C_RecentAllies.IsInteractionCategoryFilterSupportedForCurrentGameType or function() return true end
+
+C_SkillInfo = C_SkillInfo or {}
+C_SkillInfo.AbandonSkill = C_SkillInfo.AbandonSkill or function() end
+C_SkillInfo.GetSkillLineInfoByID = C_SkillInfo.GetSkillLineInfoByID or function() return nil end
+
+C_SocialRestrictions = C_SocialRestrictions or {}
+C_SocialRestrictions.AcknowledgeAgeVerificationRestriction =
+    C_SocialRestrictions.AcknowledgeAgeVerificationRestriction or function() end
+C_SocialRestrictions.IsAgeVerificationRestricted =
+    C_SocialRestrictions.IsAgeVerificationRestricted or function() return false end
+C_SocialRestrictions.IsAgeVerificationRestrictedMinor =
+    C_SocialRestrictions.IsAgeVerificationRestrictedMinor or function() return false end
+
+C_SpecializationInfo = C_SpecializationInfo or {}
+C_SpecializationInfo.GetAllClassIDs = C_SpecializationInfo.GetAllClassIDs or function()
+    local classIDs = {}
+    for index = 1, GetNumClasses() do
+        local _, _, classID = GetClassInfo(index)
+        if classID then
+            table.insert(classIDs, classID)
+        end
+    end
+    return classIDs
+end
+C_SpecializationInfo.HasPlayerEarnedATalentPoint =
+    C_SpecializationInfo.HasPlayerEarnedATalentPoint or function() return UnitLevel("player") >= 10 end
+C_SpecializationInfo.IsSpecSelectionEnabled =
+    C_SpecializationInfo.IsSpecSelectionEnabled or function() return true end
+
+C_SpellBook = C_SpellBook or {}
+C_SpellBook.GetClassSkillLineInfo = C_SpellBook.GetClassSkillLineInfo or function()
+    return C_SpellBook.GetSpellBookSkillLineInfo(2)
+end
+C_SpellBook.IsSpellBookItemLooseFlyoutMember =
+    C_SpellBook.IsSpellBookItemLooseFlyoutMember or function() return false end
+C_SpellBook.IsSpellBookItemLowRank = C_SpellBook.IsSpellBookItemLowRank or function() return false end
+C_SpellBook.SetBarSlotFromIntro = C_SpellBook.SetBarSlotFromIntro or function() end
+
+C_Spell.CancelItemTempEnchantment = C_Spell.CancelItemTempEnchantment or function() end
+C_Spell.GetConfirmationPromptHideOnEscape =
+    C_Spell.GetConfirmationPromptHideOnEscape or function() return false end
+C_Spell.GetTargetSpellID = C_Spell.GetTargetSpellID or function() return 0 end
+C_Spell.CancelAutoRepeatSpell = C_Spell.CancelAutoRepeatSpell or function() return false end
+C_Spell.GetItemCooldown = C_Spell.GetItemCooldown or function()
+    return { startTime = 0, duration = 0, isEnabled = true, isActive = false, modRate = 1 }
+end
+C_Spell.IsActiveSpell = C_Spell.IsActiveSpell or function() return false end
+C_Spell.PlaceTargetingSpellAtCursor = C_Spell.PlaceTargetingSpellAtCursor or function() end
+
+C_StableInfo = C_StableInfo or {}
+C_StableInfo.BuyStableSlot = C_StableInfo.BuyStableSlot or function() end
+C_StableInfo.GetNextStableSlotCost = C_StableInfo.GetNextStableSlotCost or function() return 0 end
+
+C_StorePublic = C_StorePublic or {}
+C_StorePublic.IsRewardsShopOverrideEnabled =
+    C_StorePublic.IsRewardsShopOverrideEnabled or function() return false end
+
+C_TradeSkillUI = C_TradeSkillUI or {}
+C_TradeSkillUI.CanTradeSkillShowCraftingUI =
+    C_TradeSkillUI.CanTradeSkillShowCraftingUI or function() return true end
+
+C_Trainer = C_Trainer or {}
+local categorizeTrainerUI = false
+C_Trainer.GetCategorizeTrainerUI = C_Trainer.GetCategorizeTrainerUI or function()
+    return categorizeTrainerUI
+end
+C_Trainer.SetCategorizeTrainerUI = C_Trainer.SetCategorizeTrainerUI or function(value)
+    categorizeTrainerUI = value and true or false
+end
+C_Trainer.GetTrainerType = C_Trainer.GetTrainerType or function() return Enum.TrainerType.General end
+
+C_TransmogOutfitInfo.GetOptionsForSlot =
+    C_TransmogOutfitInfo.GetOptionsForSlot or function() return {}, nil end
+C_TransmogOutfitInfo.SetViewedOptionForSlot =
+    C_TransmogOutfitInfo.SetViewedOptionForSlot or function() end
+
+C_UnitAuras.GetRefreshCarryOverDuration =
+    C_UnitAuras.GetRefreshCarryOverDuration or function() return nil end
+
+RegionalUniqueNamesEnabled = RegionalUniqueNamesEnabled or function() return false end
+UnitDefenseSkill = UnitDefenseSkill or function() return 0, 0 end
+UnitHasEffectivelyTankAura = UnitHasEffectivelyTankAura or function() return false end
+UnitIsInInteractRange = UnitIsInInteractRange or function(unit) return UnitExists(unit) end
+UnitResistance = UnitResistance or function() return 0, 0, 0, 0 end
+
+C_VideoOptions = C_VideoOptions or {}
+C_VideoOptions.AreHighResTexturesAvailable =
+    C_VideoOptions.AreHighResTexturesAvailable or function() return true end
+C_VideoOptions.IsLinearEnabledOnStart = C_VideoOptions.IsLinearEnabledOnStart or function() return false end
+C_VideoOptions.IsOutlineModeSupported = C_VideoOptions.IsOutlineModeSupported or function() return true end
+C_VideoOptions.IsPBRWaterSupported = C_VideoOptions.IsPBRWaterSupported or function() return true end
+C_VideoOptions.IsSecondaryLightingSupported =
+    C_VideoOptions.IsSecondaryLightingSupported or function() return true end
+
+C_VoiceChat.GetActiveVoiceProviderID = C_VoiceChat.GetActiveVoiceProviderID or function()
+    return Enum.VoiceProviderID.Legacy
+end
+C_VoiceChat.RestoreActiveVoiceProvider =
+    C_VoiceChat.RestoreActiveVoiceProvider or function() return false end
+C_VoiceChat.SetActiveVoiceProvider = C_VoiceChat.SetActiveVoiceProvider or function() return false end
+
+C_WowTokenUI = C_WowTokenUI or {}
+C_WowTokenUI.ShouldDisplayInAuctionHouse =
+    C_WowTokenUI.ShouldDisplayInAuctionHouse or function() return true end
+
+C_WoWHackAppearance = C_WoWHackAppearance or {}
+C_WoWHackAppearance.GetPlayerAuraSpellVisualKitIDs =
+    C_WoWHackAppearance.GetPlayerAuraSpellVisualKitIDs or function() return {} end
+
+C_SecureTransfer = C_SecureTransfer or {}
+C_SecureTransfer.GetMailReceiveInfo = C_SecureTransfer.GetMailReceiveInfo or function()
+    return { sender = "", money = 0 }
+end
+C_SecureTransfer.GetMailSendInfo = C_SecureTransfer.GetMailSendInfo or function()
+    return { target = "", sendMoney = 0 }
+end
+C_SecureTransfer.GetVCPurchaseProductID = C_SecureTransfer.GetVCPurchaseProductID or function() return 0 end
+C_SecureTransfer.ShouldShowTradeRMTWarning =
+    C_SecureTransfer.ShouldShowTradeRMTWarning or function() return false end
+C_SecureTransfer.TakeMailMoney = C_SecureTransfer.TakeMailMoney or function() end
+
+TurnOrActionToggle = TurnOrActionToggle or function() end
 
 C_ClassColor = C_ClassColor or {}
 local classColors = {

@@ -16,7 +16,8 @@ public sealed record CommandLineOptions(
     bool AutoConnectTact,
     string? StartupReportPath = null,
     string? StartupJsonPath = null,
-    bool ExitWhenReady = false)
+    bool ExitWhenReady = false,
+    string? GameType = null)
 {
     public static bool WantsStartupReport(string[] arguments) =>
         arguments.Any(value => value is "--startup-report" or "--startup-json");
@@ -39,6 +40,7 @@ public sealed record CommandLineOptions(
         string? startupReportPath = null;
         string? startupJsonPath = null;
         var exitWhenReady = false;
+        string? gameType = null;
 
         for (var index = 0; index < arguments.Length; index++)
         {
@@ -97,6 +99,9 @@ public sealed record CommandLineOptions(
                 case "--exit-when-ready":
                     exitWhenReady = true;
                     break;
+                case "--game-type" when index + 1 < arguments.Length:
+                    gameType = arguments[++index];
+                    break;
             }
         }
 
@@ -116,6 +121,7 @@ public sealed record CommandLineOptions(
             autoConnectTact,
             startupReportPath,
             startupJsonPath,
-            exitWhenReady);
+            exitWhenReady,
+            gameType);
     }
 }

@@ -17,4 +17,17 @@ public sealed class WowGameRulesState
     public int CurrentEventRealmQueues { get; set; }
     public int? CurrentGameModeRecordId { get; set; }
     public bool NameplateShowSelf { get; set; }
+
+    public const int StandardGameMode = 1;
+    public const int PlunderstormGameMode = 2;
+    public const int WoWHackGameMode = 3;
+    public const int ActionButtonTypeOverlayStrategyRule = 165;
+
+    public static int GameModeForGameType(string gameType) =>
+        gameType.ToLowerInvariant() switch
+        {
+            "wowlabs" => PlunderstormGameMode,
+            "wowhack" => WoWHackGameMode,
+            _ => StandardGameMode
+        };
 }

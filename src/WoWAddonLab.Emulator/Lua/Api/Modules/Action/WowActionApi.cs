@@ -39,6 +39,7 @@ internal sealed class WowActionApi : LuaApiModule
         "GetProfessionQuality",
         "GetProfessionQualityInfo",
         "GetSpell",
+        "GetSpellTypeRestrictionForAction",
         "GetTempShapeshiftBarIndex",
         "GetVehicleBarIndex",
         "HasAction",
@@ -74,6 +75,7 @@ internal sealed class WowActionApi : LuaApiModule
         "PutActionInSlot",
         "RegisterActionUIButton",
         "SetActionBarPage",
+        "SpellMatchesActionSpellTypeRestriction",
         "ShouldOverrideBarShowHealthBar",
         "ShouldOverrideBarShowManaBar",
         "ToggleAutoCastPetAction",
@@ -251,6 +253,17 @@ internal sealed class WowActionApi : LuaApiModule
                         action => action.Type.Equals("spell", StringComparison.OrdinalIgnoreCase) &&
                                   action.Id == spellId));
             }
+            case "SpellMatchesActionSpellTypeRestriction":
+            {
+                const string usage = "Usage: C_ActionBar.SpellMatchesActionSpellTypeRestriction(spellID, actionID)";
+                var spellId = RequiredInteger(state, 1, usage);
+                var actionId = RequiredOneBasedIndex(state, 2, usage);
+                var restriction = runtime.Actions.SpellTypeRestrictionBySlot.GetValueOrDefault(actionId);
+                return PushBoolean(
+                    state,
+                    restriction == 0 ||
+                    runtime.Actions.SpellTypeRestrictionBySpell.GetValueOrDefault(spellId) == restriction);
+            }
             case "FindSpellActionButtons":
             case "FindFlyoutActionButtons":
             case "FindPetActionButtons":
@@ -371,6 +384,9 @@ internal sealed class WowActionApi : LuaApiModule
         {
             case "HasAction":
                 return PushBoolean(state, slot is not null);
+            case "GetSpellTypeRestrictionForAction":
+                lua_pushinteger(state, runtime.Actions.SpellTypeRestrictionBySlot.GetValueOrDefault(slotId));
+                return 1;
             case "GetActionTexture":
                 lua_pushinteger(state, slot?.TextureId ?? 0);
                 return 1;

@@ -41,6 +41,10 @@ Use `--no-blizzard-ui` for isolated addon development, or `--blizzard-ui` to  fo
 `--no-tact` also prevents Blizzard UI extraction, so pair it with
 `--no-blizzard-ui` for a fully local isolated run.
 
+`--game-type wowhack` loads the Blizzard UI as the Talebound game mode
+(`standard` is the default, `wowlabs` is Plunderstorm); the Addons tab has the
+same Game mode choice for mainline products.
+
 The automation API listens only on `127.0.0.1:43117`. Change it with
 `--port 43118`. Use `--ticks N` for a smoke run.
 

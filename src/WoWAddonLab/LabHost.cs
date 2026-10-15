@@ -23,6 +23,7 @@ namespace WoWAddonLab;
 public sealed class LabHost : IDisposable
 {
     private readonly CommandLineOptions _options;
+    private string? _gameTypeOverride;
     private readonly IWindow _window;
     private readonly DesktopViewportCaptureProvider _viewportCapture = new();
     private EmulatorSession? _session;
@@ -167,6 +168,7 @@ public sealed class LabHost : IDisposable
     public LabHost(CommandLineOptions options)
     {
         _options = options;
+        _gameTypeOverride = options.GameType;
         _remainingSmokeTicks = options.Ticks;
         var creationSpan = StartupTimeline.Begin("create application window object");
         var windowOptions = WindowOptions.Default with
@@ -1402,6 +1404,7 @@ public sealed class LabHost : IDisposable
         ImGui.EndDisabled();
         if (_options.LoadBlizzardUi.HasValue && ImGui.IsItemHovered())
             ImGui.SetTooltip("This setting is fixed by the command line.");
+        RenderGameTypeSelector(installation, productSettings, loadBlizzardUi);
         if (loadBlizzardUi)
         {
             if (_tactInitialization is { IsCompleted: false })
@@ -2638,7 +2641,7 @@ public sealed class LabHost : IDisposable
         }
 
         var installation = _installations[_selectedInstallation];
-        var manifestContext = AddonManifestContextFactory.For(installation);
+        var manifestContext = ManifestContextFor(installation);
         _session!.ManifestContext = manifestContext;
         _settings.SelectedProductPath = installation.ProductPath;
         using (var span = StartupTimeline.Begin("discover installed addons"))
@@ -2675,6 +2678,53 @@ public sealed class LabHost : IDisposable
 
     private bool ShouldLoadBlizzardUi() =>
         _options.LoadBlizzardUi ?? CurrentProductSettings().LoadBlizzardUi;
+
+    private AddonManifestContext ManifestContextFor(WowInstallation installation) =>
+        AddonManifestContextFactory.For(
+            installation,
+            _gameTypeOverride ?? CurrentProductSettings().GameType);
+
+    private static string GameTypeLabel(string gameType) =>
+        gameType.ToLowerInvariant() switch
+        {
+            "wowhack" => "Talebound",
+            "wowlabs" => "Plunderstorm",
+            _ => "Standard"
+        };
+
+    private void RenderGameTypeSelector(
+        WowInstallation installation,
+        ProductEmulationSettings productSettings,
+        bool loadBlizzardUi)
+    {
+        var current = ManifestContextFor(installation);
+        if (!current.Family.Equals("mainline", StringComparison.OrdinalIgnoreCase) ||
+            !ImGui.BeginCombo("Game mode", GameTypeLabel(current.GameType)))
+        {
+            return;
+        }
+        foreach (var gameType in AddonManifestContextFactory.MainlineGameTypes)
+        {
+            var selected = gameType.Equals(current.GameType, StringComparison.OrdinalIgnoreCase);
+            if (!ImGui.Selectable(GameTypeLabel(gameType), selected) || selected)
+                continue;
+            productSettings.GameType = gameType;
+            _gameTypeOverride = null;
+            PersistSettings();
+            _session!.ManifestContext = ManifestContextFor(installation);
+            _blizzardUi = null;
+            if (loadBlizzardUi && _options.AutoConnectTact)
+            {
+                _reloadAfterTactInitialization = true;
+                BeginTactInitialization();
+            }
+            else
+            {
+                Reload();
+            }
+        }
+        ImGui.EndCombo();
+    }
 
     private IReadOnlyList<string> LimitBlizzardUiModules(IReadOnlyList<string> paths) =>
         _options.BlizzardUiModuleLimit is { } limit
@@ -2815,6 +2865,7 @@ public sealed class LabHost : IDisposable
         var installation = _installations[_selectedInstallation];
         _session!.BuildInfo = WowBuildInfo.FromVersion(installation.Version);
         var prepareBlizzardUi = ShouldLoadBlizzardUi();
+        var manifestContext = ManifestContextFor(installation);
         var forceDefinitionUpdate = _forceDefinitionUpdate;
         _forceDefinitionUpdate = false;
         var source = new TactAssetSource(installation);
@@ -2978,6 +3029,7 @@ public sealed class LabHost : IDisposable
                 blizzardUi = BlizzardUiBootstrap.Prepare(
                     source,
                     installation,
+                    manifestContext,
                     WoWAddonLabPaths.BlizzardUiCacheDirectory);
                 span.Annotate(blizzardUi.CacheHit
                     ? $"cache hit, {blizzardUi.ExtractedFiles} files"

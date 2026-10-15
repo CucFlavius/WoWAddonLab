@@ -17207,7 +17207,7 @@ public sealed class LuaRuntimeTests
         using var session = new EmulatorSession();
 
         Assert.Equal(
-            "11:nil:true:true:false:false:false",
+            "12:nil:true:true:false:false:false",
             session.Lua.Evaluate(
                 "local count=0; for _ in pairs(C_EditMode) do count=count+1 end; " +
                 "local okName=C_EditMode.IsValidLayoutName(''); " +
@@ -20287,7 +20287,7 @@ public sealed class LuaRuntimeTests
         using var session = new EmulatorSession();
 
         Assert.Equal(
-            "70:function:function:function:function:function:function:function:function:" +
+            "76:function:function:function:function:function:function:function:function:" +
             "0:0:0:0:1:nil:6:nil:0:1:nil",
             session.Lua.Evaluate(
                 "local count=0; for _ in pairs(C_ActionBar) do count=count+1 end; " +
@@ -27385,7 +27385,7 @@ public sealed class LuaRuntimeTests
         auctionHouse.OwnedAuctionBidderNames[77] = "Bidder";
 
         Assert.Equal(
-            "85:0:2:1:123:45:6:7:1:nil:0:1:nil:0:1:nil:0:1:nil:" +
+            "86:0:2:1:123:45:6:7:1:nil:0:1:nil:0:1:nil:0:1:nil:" +
             "18:0:1800:1800:7200:7200:43200:43200:172800:false:true:" +
             "true:123:123:70:2:8:true:3:9:true:1000:2000:3000:" +
             "Bidder:nil:false:false:false:false:true:true",

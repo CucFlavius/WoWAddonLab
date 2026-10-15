@@ -8,6 +8,7 @@ public sealed class ProductEmulationSettings
     public HashSet<string> DisabledBlizzardModules { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string ProfileId { get; set; } = "clean";
     public bool LoadBlizzardUi { get; set; } = true;
+    public string GameType { get; set; } = AddonManifestContextFactory.StandardGameType;
     public int? SimulatedWidth { get; set; }
     public int? SimulatedHeight { get; set; }
     public bool? UseUiScale { get; set; }

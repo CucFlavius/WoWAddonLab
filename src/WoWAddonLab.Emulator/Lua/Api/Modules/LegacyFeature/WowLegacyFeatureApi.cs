@@ -41,7 +41,8 @@ internal sealed class WowLegacyFeatureApi : LuaApiModule
             "GetDelveEntranceHeaderString", "GetDelveEntranceTiers",
             "GetDelveEntranceTitleString", "GetDelvesMinRequiredLevel",
             "GetTieredEntranceOptionalAffixTraitTreeID", "IsDelveEntranceTierEnabled",
-            "RequestPartyEligibilityForDelveTiers", "SelectDelveEntranceTier");
+            "RequestPartyEligibilityForDelveTiers", "SelectDelveEntranceTier",
+            "HasActiveTale", "GetActiveTieredEntranceProgress", "RequestClearActiveTale");
         RegisterNamespace(state, "C_FrameManager", "GetFrameVisibilityState");
     }
 
@@ -110,6 +111,29 @@ internal sealed class WowLegacyFeatureApi : LuaApiModule
             case "GetDelveEntranceTitleString":
                 lua_pushstring(state, string.Empty);
                 return 1;
+            case "HasActiveTale":
+                lua_pushboolean(state, LuaBindings.GetRuntime(state).DelvesTale.HasActiveTale ? 1 : 0);
+                return 1;
+            case "GetActiveTieredEntranceProgress":
+            {
+                var progress = LuaBindings.GetRuntime(state).DelvesTale.ActiveTieredEntranceProgress;
+                lua_createtable(state, progress.Count, 0);
+                for (var index = 0; index < progress.Count; index++)
+                {
+                    lua_createtable(state, 0, 3);
+                    lua_pushinteger(state, progress[index].QuestId);
+                    lua_setfield(state, -2, "questID");
+                    lua_pushstring(state, progress[index].Description);
+                    lua_setfield(state, -2, "description");
+                    lua_pushboolean(state, progress[index].Completed ? 1 : 0);
+                    lua_setfield(state, -2, "completed");
+                    lua_rawseti(state, -2, index + 1);
+                }
+                return 1;
+            }
+            case "RequestClearActiveTale":
+                LuaBindings.GetRuntime(state).DelvesTale.ClearActiveTaleRequestCount++;
+                return 0;
             default:
                 return 0;
         }

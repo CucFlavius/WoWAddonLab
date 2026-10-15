@@ -42,7 +42,7 @@ public static partial class BlizzardUiBootstrap
         "Blizzard_UnitFrame",
         "Blizzard_WorldMap"
     ];
-    private const int CacheSchemaVersion = 42;
+    private const int CacheSchemaVersion = 45;
     private static readonly IReadOnlyDictionary<string, string[]> ImplicitInGameDependencies =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
@@ -57,12 +57,18 @@ public static partial class BlizzardUiBootstrap
     public static BlizzardUiBootstrapResult Prepare(
         TactAssetSource source,
         WowInstallation installation,
+        AddonManifestContext context,
         string cacheRoot)
     {
         if (!source.IsInitialized || source.ListfilePath is null)
             throw new InvalidOperationException("TACTSharp must be initialized before preparing Blizzard UI.");
 
         var version = SafePathSegment(installation.Version ?? "unknown");
+        if (!context.GameType.Equals(AddonManifestContextFactory.StandardGameType, StringComparison.OrdinalIgnoreCase) &&
+            context.Family.Equals("mainline", StringComparison.OrdinalIgnoreCase))
+        {
+            version = $"{version}-{context.GameType.ToLowerInvariant()}";
+        }
         var versionRoot = Path.Combine(
             cacheRoot,
             installation.Product.ProductCode.ToLowerInvariant(),
@@ -78,7 +84,6 @@ public static partial class BlizzardUiBootstrap
             Directory.Delete(outputRoot, true);
 
         var catalog = BuildCatalog(source, source.ListfilePath);
-        var context = AddonManifestContextFactory.For(installation);
         var prepared = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var incompatible = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var sourceMetadata =
@@ -131,11 +136,14 @@ public static partial class BlizzardUiBootstrap
                 Directory.CreateDirectory(addonRoot);
                 var normalizedEntries = new List<string>();
                 var secureEnvironmentEntries = new List<string>();
+                var bootstrapEntries = new List<string>();
                 var listedCascPaths = parsed.Files
-                    .Select(value => NormalizePath($"{toc.Directory}/{value}"))
+                    .Select(value => NormalizePath($"{toc.Directory}/{WithoutBootstrapAnnotation(value)}"))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                foreach (var entry in parsed.Files)
+                foreach (var annotatedEntry in parsed.Files)
                 {
+                    var entry = WithoutBootstrapAnnotation(annotatedEntry);
+                    var isBootstrapEntry = entry.Length != annotatedEntry.Length;
                     var cascPath = NormalizePath($"{toc.Directory}/{entry}");
                     if (!cascPath.StartsWith(toc.Directory + "/", StringComparison.OrdinalIgnoreCase))
                     {
@@ -153,6 +161,14 @@ public static partial class BlizzardUiBootstrap
                             warnings,
                             out var count))
                     {
+                        if (isBootstrapEntry)
+                        {
+                            bootstrapEntries.Add(
+                                cascPath[(toc.Directory.Length + 1)..]
+                                    .Replace('/', Path.DirectorySeparatorChar));
+                            extractedFiles += count;
+                            continue;
+                        }
                         if (TryExtractSecureEnvironmentSource(
                                 source,
                                 catalog,
@@ -168,6 +184,16 @@ public static partial class BlizzardUiBootstrap
                             normalizedEntries.Add(secureEntry);
                             secureEnvironmentEntries.Add(secureEntry);
                             extractedFiles += secureCount;
+                        }
+                        else if (ListedSecureEnvironmentSource(
+                                     source,
+                                     catalog,
+                                     cascPath,
+                                     toc.Directory,
+                                     listedCascPaths,
+                                     warnings) is { } listedSecureEntry)
+                        {
+                            secureEnvironmentEntries.Add(listedSecureEntry);
                         }
                         normalizedEntries.Add(
                             cascPath[(toc.Directory.Length + 1)..]
@@ -201,7 +227,8 @@ public static partial class BlizzardUiBootstrap
                             parsed.Metadata,
                             dependencies,
                             normalizedEntries,
-                            secureEnvironmentEntries)));
+                            secureEnvironmentEntries,
+                            bootstrapEntries)));
                 prepared[addonName] = addonRoot;
                 sourceMetadata[addonName] = parsed.Metadata;
                 return true;
@@ -624,6 +651,34 @@ public static partial class BlizzardUiBootstrap
         return true;
     }
 
+    private static string WithoutBootstrapAnnotation(string entry)
+    {
+        const string annotation = "[bootstrap]";
+        return entry.EndsWith(annotation, StringComparison.OrdinalIgnoreCase)
+            ? entry[..^annotation.Length].TrimEnd()
+            : entry;
+    }
+
+    private static string? ListedSecureEnvironmentSource(
+        TactAssetSource source,
+        Catalog catalog,
+        string cascPath,
+        string addonDirectory,
+        IReadOnlySet<string> listedCascPaths,
+        List<string> warnings)
+    {
+        if (!cascPath.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var sourcePath = cascPath[..^4] + ".lua";
+        if (!listedCascPaths.Contains(sourcePath) ||
+            !DeclaresSecureMixin(source, catalog, cascPath, warnings))
+        {
+            return null;
+        }
+        return sourcePath[(addonDirectory.Length + 1)..]
+            .Replace('/', Path.DirectorySeparatorChar);
+    }
+
     private static bool ExtractFile(
         TactAssetSource source,
         Catalog catalog,
@@ -767,7 +822,8 @@ public static partial class BlizzardUiBootstrap
         IReadOnlyDictionary<string, string> metadata,
         IReadOnlyList<string> dependencies,
         IReadOnlyList<string> files,
-        IReadOnlyList<string> secureEnvironmentFiles)
+        IReadOnlyList<string> secureEnvironmentFiles,
+        IReadOnlyList<string> bootstrapFiles)
     {
         var builder = new StringBuilder();
         builder.AppendLine($"## Title: {addonName}");
@@ -784,6 +840,8 @@ public static partial class BlizzardUiBootstrap
             builder.AppendLine($"## Dependencies: {string.Join(", ", dependencies)}");
         if (secureEnvironmentFiles.Count > 0)
             builder.AppendLine($"## SecureEnvironmentFiles: {string.Join(", ", secureEnvironmentFiles)}");
+        if (bootstrapFiles.Count > 0)
+            builder.AppendLine($"## BootstrapFiles: {string.Join(", ", bootstrapFiles)}");
         foreach (var file in files)
             builder.AppendLine(file);
         return builder.ToString();

@@ -148,6 +148,7 @@ internal sealed class LuaApiCatalog
         new WowAdventureJournalApi(),
         new WowStorePublicApi(),
         new WowPlayerChoiceApi(),
+        new WowGameModeExpBarApi(),
         new WowSummonInfoApi(),
         new WowInvasionInfoApi(),
         new WowEncounterJournalApi(),

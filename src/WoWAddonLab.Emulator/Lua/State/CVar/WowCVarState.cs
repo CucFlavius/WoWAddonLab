@@ -36,6 +36,12 @@ public sealed class WowCVarState
         Define("worldBaseMip", "0");
         Define("graphicsTextureResolution", "2");
         Define("encounterTimelineIconographyHiddenMask", "0");
+        Define("SmartNavigationScrollSpeed", "5000");
+        Define("GamepadMapScrollSpeed", "400");
+        Define("GamepadMapScrollSpeedFullScreen", "1000");
+        Define("GamepadMapZoomSpeed", "2");
+        Define("GamepadMapEdgePanDistance", "50");
+        Define("CAAPulsePlayerHealthPercent", "0");
         Define("nameplateAuraScale", "1.000000");
         Define("nameplateDebuffPadding", "0");
         Define("nameplateSize", "1");

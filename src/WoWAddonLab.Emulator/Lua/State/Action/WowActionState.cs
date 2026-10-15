@@ -11,6 +11,8 @@ public sealed class WowActionState
     public Dictionary<int, IReadOnlyList<int>> PetActionPetBarIndices { get; } = [];
     public Dictionary<int, WowPossessActionState> PossessActions { get; } = [];
     public Dictionary<int, WowPetActionState> PetActions { get; } = [];
+    public Dictionary<int, int> SpellTypeRestrictionBySlot { get; } = [];
+    public Dictionary<int, int> SpellTypeRestrictionBySpell { get; } = [];
 
     public int? LastUsedSlot { get; set; }
     public int ActionBarPage { get; set; }

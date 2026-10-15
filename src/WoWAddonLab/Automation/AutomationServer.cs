@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WoWAddonLab.Emulator;
+using WoWAddonLab.Emulator.Lua;
 
 namespace WoWAddonLab.Automation;
 
@@ -125,6 +126,20 @@ public sealed class AutomationServer : IAsyncDisposable
             return Results.Ok(new { triggered = request.Name });
         });
 
+        _application.MapPost("/v1/player-choice", async (PlayerChoiceRequest request, CancellationToken token) =>
+        {
+            var spellIds = request.SpellIds ?? WowSpellPlayerChoice.DefaultSpellIds;
+            await _session.InvokeAsync(value =>
+            {
+                if (spellIds.Count == 0)
+                    value.ClosePlayerChoice();
+                else
+                    value.ShowPlayerChoice(request.TextureKit ?? WowSpellPlayerChoice.TaleboundTextureKit, spellIds);
+                return true;
+            }, token);
+            return Results.Ok(new { options = spellIds.Count });
+        });
+
         _application.MapPost("/v1/input/key", async (KeyRequest request, CancellationToken token) =>
         {
             await _session.InvokeAsync(value =>
@@ -217,6 +232,7 @@ public sealed class AutomationServer : IAsyncDisposable
     private sealed record EvalRequest(string Code);
     private sealed record EvalResponse(string? Result, string? Error);
     private sealed record EventRequest(string Name, JsonElement[]? Args);
+    private sealed record PlayerChoiceRequest(string? TextureKit, int[]? SpellIds);
     private sealed record KeyRequest(
         string Key,
         bool Down,

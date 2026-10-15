@@ -4,19 +4,26 @@ namespace WoWAddonLab.Configuration;
 
 public static class AddonManifestContextFactory
 {
+    public const string StandardGameType = "standard";
+
+    public static IReadOnlyList<string> MainlineGameTypes { get; } = [StandardGameType, "wowhack", "wowlabs"];
+
     public static AddonManifestContext For(
         WowInstallation installation,
+        string? gameType = null,
         string textLocale = "enUS")
     {
         var code = installation.Product.ProductCode;
         if (!code.Contains("classic", StringComparison.OrdinalIgnoreCase) &&
             !code.Contains("anniversary", StringComparison.OrdinalIgnoreCase))
         {
+            var mainlineGameType = MainlineGameTypes.FirstOrDefault(value =>
+                value.Equals(gameType, StringComparison.OrdinalIgnoreCase)) ?? StandardGameType;
             return new(
                 "mainline",
-                "standard",
+                mainlineGameType,
                 "Mainline",
-                "Standard",
+                char.ToUpperInvariant(mainlineGameType[0]) + mainlineGameType[1..],
                 textLocale,
                 IsPublicTestProduct(code));
         }

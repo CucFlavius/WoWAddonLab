@@ -76,14 +76,17 @@ if (options.Headless)
         else
         {
             selectedInstallation = installation;
-            var manifestContext = AddonManifestContextFactory.For(installation);
-            session.ManifestContext = manifestContext;
             var productKey = Path.GetFullPath(installation.ProductPath);
             if (!settings.Products.TryGetValue(productKey, out var productSettings))
             {
                 productSettings = new ProductEmulationSettings();
                 settings.Products[productKey] = productSettings;
             }
+            var manifestContext = AddonManifestContextFactory.For(
+                installation,
+                options.GameType ?? productSettings.GameType);
+            session.ManifestContext = manifestContext;
+            StartupTimeline.Fact("Game type", manifestContext.GameType);
             loadBlizzardUi = options.LoadBlizzardUi ?? productSettings.LoadBlizzardUi;
             disabledBlizzardModules = productSettings.DisabledBlizzardModules;
             StartupTimeline.Fact("Product", $"{installation.Product.ProductCode} ({installation.Version})");
@@ -278,6 +281,7 @@ if (options.Headless)
             prepared = BlizzardUiBootstrap.Prepare(
                 tact,
                 selectedInstallation,
+                session.ManifestContext,
                 WoWAddonLabPaths.BlizzardUiCacheDirectory);
             span.Annotate(prepared.CacheHit ? "cache hit" : "extracted");
             StartupTimeline.Fact("Blizzard UI cache", prepared.CacheHit ? "hit" : "miss (extracted)");

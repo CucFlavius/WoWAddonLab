@@ -215,6 +215,8 @@ public sealed class LuaRuntime : IDisposable
     public WowSocialQueueState SocialQueue { get; } = new();
     public WowAdventureJournalState AdventureJournal { get; } = new();
     public WowPlayerChoiceState PlayerChoice { get; } = new();
+    public WowGameModeExpBarState GameModeExpBar { get; } = new();
+    public WowDelvesTaleState DelvesTale { get; } = new();
     public WowSummonInfoState SummonInfo { get; } = new();
     public WowInvasionInfoState InvasionInfo { get; } = new();
     public WowProfessionState Professions { get; } = new();
@@ -458,6 +460,7 @@ public sealed class LuaRuntime : IDisposable
     private readonly Dictionary<string, string> _addonLoadErrors = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<AddonLoadFailure> _addonLoadFailures = [];
     private readonly HashSet<string> _loadedAddonNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _bootstrappedAddonNames = new(StringComparer.OrdinalIgnoreCase);
     public bool ControlDown
     {
         get => Input.ControlDown;
@@ -633,6 +636,7 @@ public sealed class LuaRuntime : IDisposable
         _addonLoadFailures.Clear();
         _loadedAddonNames.Clear();
         _loadingAddonNames.Clear();
+        _bootstrappedAddonNames.Clear();
         IsLoaded = false;
 
         ApplyDocumentedApiValues(AvailableManifests);
@@ -679,6 +683,9 @@ public sealed class LuaRuntime : IDisposable
                     Manifests.Count));
             }
 
+            foreach (var manifest in AvailableManifests)
+                ExecuteBootstrapFiles(manifest);
+
             TriggerEditModeLayoutsUpdated();
             TriggerEvent("VARIABLES_LOADED");
             TriggerEvent("UPDATE_CHAT_WINDOWS");
@@ -704,6 +711,10 @@ public sealed class LuaRuntime : IDisposable
     private static readonly string[] InterfaceGlobalStringTags =
     [
         "BLOCK_REDUCED",
+        "HD_TEXTURES_BUTTON",
+        "OPTION_HD_TEXTURES",
+        "OPTION_TOOLTIP_HD_TEXTURES",
+        "PBR_LIQUID_DETAIL",
         "OPTION_TOOLTIP_SOCIAL_DISCONNECT_DISCORD",
         "OPTION_TOOLTIP_SOCIAL_DISCORD_DISPLAY_NAME",
         "OPTION_TOOLTIP_SOCIAL_DISCORD_DISPLAY_NAME_OPTION_DEFAULT",
@@ -752,6 +763,11 @@ public sealed class LuaRuntime : IDisposable
         EventUtils.ValidEvents.Add("FRAMES_LOADED");
         var enumFieldCount = ApplyDocumentedTables("Enum", documentedEnums);
         var constantFieldCount = ApplyDocumentedTables("Constants", documentedConstants);
+        if (documentedEnums.TryGetValue("EditModeAccountSetting", out var accountSettings))
+        {
+            foreach (var setting in accountSettings.Values)
+                EditMode.AccountSettings.TryAdd((int)setting, 0);
+        }
         if (enumFieldCount + constantFieldCount > 0)
         {
             Log.Info(
@@ -924,6 +940,8 @@ public sealed class LuaRuntime : IDisposable
                     LoadSavedVariables(manifest);
             }
 
+            ExecuteBootstrapFiles(manifest);
+            SetModuleDependencies(manifest);
             lua_newtable(State);
             var privateTableReference = luaL_ref(State, LUA_REGISTRYINDEX);
             var exposesPrivateTable = IsTrueMetadata(manifest, "AllowAddOnTableAccess");
@@ -1032,8 +1050,14 @@ public sealed class LuaRuntime : IDisposable
         Log.Write(EmulatorLogLevel.Trace, "lua", $"Executed {path}.");
     }
 
-    private void ExecuteAddonFile(string path, string addonName, int privateTableReference)
+    private void ExecuteAddonFile(
+        string path,
+        string addonName,
+        int privateTableReference,
+        string? moduleName = null)
     {
+        if (moduleName is not null)
+            RegisterModuleSource(moduleName, path);
         var status = LoadLuaFile(path);
         if (status != 0)
             throw BuildLuaException($"compile {path}");
@@ -1045,8 +1069,76 @@ public sealed class LuaRuntime : IDisposable
         if (status != 0)
             throw BuildLuaException($"execute {path}");
 
+        if (moduleName is not null)
+            RegisterModule(moduleName);
         lua_settop(State, 0);
         Log.Write(EmulatorLogLevel.Trace, "lua", $"Executed {path} for {addonName}.");
+    }
+
+    private static string? ModuleName(AddonManifest manifest, string path)
+    {
+        var relative = Path.GetRelativePath(manifest.RootPath, path);
+        if (relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative))
+            return null;
+        var directory = Path.GetDirectoryName(relative);
+        var fileName = Path.GetFileNameWithoutExtension(relative);
+        var dotted = string.IsNullOrEmpty(directory)
+            ? fileName
+            : $"{directory.Replace(Path.DirectorySeparatorChar, '.').Replace(Path.AltDirectorySeparatorChar, '.')}.{fileName}";
+        var addonDirectory = Path.GetFileName(
+            manifest.RootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return $"{addonDirectory}.{dotted}";
+    }
+
+    private void RegisterModuleSource(string moduleName, string path)
+    {
+        lua_getglobal(State, "__WoWAddonLabRegisterModuleSource");
+        lua_pushstring(State, moduleName);
+        lua_pushstring(State, $"@{path}");
+        if (lua_pcall(State, 2, 0, 0) != 0)
+        {
+            Log.Error("loader", $"Module source registration failed for {moduleName}: {lua_tostring(State, -1)}");
+            lua_pop(State, 1);
+        }
+    }
+
+    private void RegisterModule(string moduleName)
+    {
+        var resultCount = lua_gettop(State);
+        lua_getglobal(State, "__WoWAddonLabRegisterModule");
+        lua_pushstring(State, moduleName);
+        lua_pushboolean(
+            State,
+            _currentAddonEnvironmentReference is { } environment &&
+            environment == _secureEnvironmentReference
+                ? 1
+                : 0);
+        if (resultCount > 0)
+            lua_pushvalue(State, resultCount);
+        else
+            lua_pushnil(State);
+        if (lua_pcall(State, 3, 0, 0) != 0)
+        {
+            Log.Error("loader", $"Module registration failed for {moduleName}: {lua_tostring(State, -1)}");
+            lua_pop(State, 1);
+        }
+    }
+
+    private void SetModuleDependencies(AddonManifest manifest)
+    {
+        lua_getglobal(State, "__WoWAddonLabSetModuleDependencies");
+        lua_pushstring(State, manifest.Name);
+        lua_newtable(State);
+        foreach (var dependency in RequiredDependencies(manifest))
+        {
+            lua_pushboolean(State, 1);
+            lua_setfield(State, -2, dependency);
+        }
+        if (lua_pcall(State, 2, 0, 0) != 0)
+        {
+            Log.Error("loader", $"Module dependency registration failed for {manifest.Name}: {lua_tostring(State, -1)}");
+            lua_pop(State, 1);
+        }
     }
 
     private void ExecuteAddonChunk(
@@ -1129,7 +1221,7 @@ public sealed class LuaRuntime : IDisposable
             if (Environment.GetEnvironmentVariable("WOW_ADDON_LAB_TRACE_LOAD") == "1")
                 Console.Error.WriteLine(
                     $"LOAD {manifest.Name}/{Path.GetRelativePath(manifest.RootPath, path)}");
-            ExecuteAddonFile(path, manifest.Name, privateTableReference);
+            ExecuteAddonFile(path, manifest.Name, privateTableReference, ModuleName(manifest, path));
         }
         catch (Exception exception)
         {
@@ -4175,12 +4267,15 @@ public sealed class LuaRuntime : IDisposable
     private string CharacterSavedVariablesPath(AddonManifest manifest) =>
         Path.Combine(SavedVariablesDirectory, "Character", $"{manifest.Name}.lua");
 
-    private static IReadOnlySet<string> SecureEnvironmentFiles(AddonManifest manifest)
+    private static IReadOnlySet<string> SecureEnvironmentFiles(AddonManifest manifest) =>
+        MetadataFiles(manifest, "SecureEnvironmentFiles").ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<string> MetadataFiles(AddonManifest manifest, string key)
     {
-        if (!manifest.Metadata.TryGetValue("SecureEnvironmentFiles", out var value) ||
+        if (!manifest.Metadata.TryGetValue(key, out var value) ||
             string.IsNullOrWhiteSpace(value))
         {
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return [];
         }
 
         return value
@@ -4188,7 +4283,37 @@ public sealed class LuaRuntime : IDisposable
             .Select(entry => Path.GetFullPath(Path.Combine(
                 manifest.RootPath,
                 entry.Replace('\\', Path.DirectorySeparatorChar))))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .ToArray();
+    }
+
+    private void ExecuteBootstrapFiles(AddonManifest manifest)
+    {
+        if (!_bootstrappedAddonNames.Add(manifest.Name))
+            return;
+        var files = MetadataFiles(manifest, "BootstrapFiles");
+        if (files.Count == 0)
+            return;
+
+        var previousAddonName = _currentAddonName;
+        var previousAddonIsInsecure = _currentAddonIsInsecure;
+        _currentAddonName = manifest.Name;
+        _currentAddonIsInsecure = !IsSecureAddon(manifest.Name);
+        var restoreEnvironmentReference = SwapAddonEnvironment(
+            IsTrueMetadata(manifest, "UseSecureEnvironment") ? EnsureSecureEnvironment() : null);
+        lua_newtable(State);
+        var privateTableReference = luaL_ref(State, LUA_REGISTRYINDEX);
+        try
+        {
+            foreach (var file in files)
+                TryExecuteAddonFile(file, manifest, privateTableReference);
+        }
+        finally
+        {
+            luaL_unref(State, LUA_REGISTRYINDEX, privateTableReference);
+            SwapAddonEnvironment(restoreEnvironmentReference);
+            _currentAddonName = previousAddonName;
+            _currentAddonIsInsecure = previousAddonIsInsecure;
+        }
     }
 
     private static bool IsTrueMetadata(AddonManifest manifest, string key) =>

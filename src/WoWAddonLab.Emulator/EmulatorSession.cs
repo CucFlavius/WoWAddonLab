@@ -307,11 +307,38 @@ public sealed class EmulatorSession : IDisposable
             Providers,
             _luaCacheDirectory);
         Lua.BuildInfo = _buildInfo;
+        Lua.GameRules.ActiveGameMode = WowGameRulesState.GameModeForGameType(ManifestContext.GameType);
+        if (Lua.GameRules.ActiveGameMode == WowGameRulesState.WoWHackGameMode)
+            ApplyWoWHackDefaults();
         ConfigureRuntimeHooks();
         if (ClientCVarConfigPath is not null)
             Lua.CVars.ImportConfigFile(ClientCVarConfigPath);
         foreach (var (name, value) in ClientCVarOverrides)
             Lua.CVars.SetValue(name, value);
+    }
+
+    public void ShowPlayerChoice(string textureKit, IReadOnlyList<int> spellIds)
+    {
+        Lua.PlayerChoice.CurrentChoice = WowSpellPlayerChoice.Build(Providers.Spell, textureKit, spellIds);
+        Lua.PlayerChoice.WaitingForResponse = true;
+        Lua.TriggerEvent("PLAYER_CHOICE_UPDATE");
+    }
+
+    public void ClosePlayerChoice()
+    {
+        Lua.PlayerChoice.CurrentChoice = null;
+        Lua.PlayerChoice.WaitingForResponse = false;
+        Lua.TriggerEvent("PLAYER_CHOICE_CLOSE");
+    }
+
+    private void ApplyWoWHackDefaults()
+    {
+        const int manaPipsAndEnergyOverlay = 3;
+        const int ultimateActionSlot = 145;
+        const int ultimateSpellTypeRestriction = 3;
+        Lua.GameRules.RuleValueOverrides[WowGameRulesState.ActionButtonTypeOverlayStrategyRule] =
+            manaPipsAndEnergyOverlay;
+        Lua.Actions.SpellTypeRestrictionBySlot[ultimateActionSlot] = ultimateSpellTypeRestriction;
     }
 
     private void ConfigureRuntimeHooks()

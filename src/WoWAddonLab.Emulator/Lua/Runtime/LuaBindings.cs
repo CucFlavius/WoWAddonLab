@@ -111,7 +111,7 @@ internal static class LuaBindings
 
     private static readonly string[] GlobalFunctions =
     [
-        "CreateFont", "CreateFontFamily", "CreateForbiddenFrame", "CreateFrame", "EnumerateFrames", "fastrandom", "GetBuildInfo", "GetButtonMetatable", "GetFontInfo", "GetFonts", "GetFontStringMetatable", "GetFrameMetatable", "strsplittable",
+        "CreateFont", "CreateFontFamily", "CreateForbiddenFrame", "CreateFrame", "EnumerateFrames", "fastrandom", "GetBuildInfo", "GetButtonMetatable", "GetFontInfo", "GetFonts", "GetFontStringMetatable", "GetFrameMetatable", "GetTextureMetatable", "strsplittable",
         "GetCurrentKeyBoardFocus",
         "GetPhysicalScreenSize", "GetScreenDPIScale", "GetScreenHeight", "GetScreenWidth"
     ];
@@ -364,6 +364,10 @@ internal static class LuaBindings
             case "GetFontStringMetatable":
                 EnsureObjectMetatable(state, "FontString");
                 luaL_getmetatable(state, $"{ObjectMetatable}.fontstring");
+                return 1;
+            case "GetTextureMetatable":
+                EnsureObjectMetatable(state, "Texture");
+                luaL_getmetatable(state, $"{ObjectMetatable}.texture");
                 return 1;
             case "GetSpellInfo":
                 {
